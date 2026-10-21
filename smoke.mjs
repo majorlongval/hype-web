@@ -8,8 +8,12 @@ const shots = (process.argv[4] ?? "").split(",").filter(Boolean).map(Number);
 const keys = JSON.parse(process.argv[5] ?? "[]");
 const candidates = [process.env.CHROME, `${homedir()}/.cache/ms-playwright/chromium-1223/chrome-linux64/chrome`, "/opt/pw-browsers/chromium"];
 const executablePath = candidates.find((p) => p && existsSync(p));
-const browser = await chromium.launch({ executablePath, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--autoplay-policy=no-user-gesture-required"] });
-const page = await browser.newPage({ viewport: { width: 1280, height: 960 } });
+const launch = { executablePath, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--autoplay-policy=no-user-gesture-required"] };
+const viewport = { width: 1280, height: 960 };
+const browser = process.env.PROFILE
+  ? await chromium.launchPersistentContext(process.env.PROFILE, { ...launch, viewport })
+  : await chromium.launch(launch);
+const page = await browser.newPage(process.env.PROFILE ? undefined : { viewport });
 page.on("console", (m) => console.log(`[console.${m.type()}] ${m.text()}`));
 page.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
 await page.goto(url);
@@ -31,5 +35,17 @@ for (let s = 1; s <= seconds; s++) {
 console.log("---- page log ----");
 console.log(await page.textContent("#log"));
 await page.screenshot({ path: "/tmp/hype-final.png" });
+const stored = await page.evaluate(async () => {
+  const out = [];
+  const walk = async (dir, prefix) => {
+    for await (const [name, h] of dir.entries()) {
+      if (h.kind === "file") out.push(`${prefix}${decodeURIComponent(name)} (${(await h.getFile()).size} bytes)`);
+      else await walk(h, `${prefix}${name}/`);
+    }
+  };
+  await walk(await navigator.storage.getDirectory(), "");
+  return out;
+});
+console.log(`---- browser storage (${stored.length} files) ----\n${stored.join("\n")}`);
 await browser.close();
 console.log(`done in ${((Date.now() - t0) / 1000).toFixed(0)}s`);

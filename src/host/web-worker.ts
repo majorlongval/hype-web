@@ -1,4 +1,4 @@
-import { bootGame, type Disc } from "../boot";
+import { bootGame, readInstallPlan, type Disc } from "../boot";
 import type { FileSource, PersistStore } from "../win32/vfs";
 import { glide } from "../win32/glide3x";
 import { mm, type AudioSink } from "../win32/winmm";
@@ -203,7 +203,7 @@ function tick(): void {
 async function start(msg: Extract<ToWorker, { t: "start" }>): Promise<void> {
   post({ t: "status", msg: "Reading disc…" });
   const disc = await openDisc(msg.disc);
-  const [saved, persist] = await openSaves(msg.disc.label);
+  const [saved, persist] = await openSaves(msg.disc.label || readInstallPlan(disc).volumeName);
   const t0 = performance.now();
   const host = { now: () => performance.now() - t0, log };
   const booted = bootGame({ disc, host, language: msg.language, saved, persist });

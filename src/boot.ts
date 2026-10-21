@@ -36,16 +36,20 @@ export interface Booted {
   exe: GuestModule;
 }
 
+export function readInstallPlan(disc: Disc, language = "English"): InstallPlan {
+  const insPath = disc.paths().find((p) => p.toUpperCase() === "INSTDATA\\UBI.INS");
+  if (!insPath) throw new Error("This doesn't look like a Hype disc: InstData\\ubi.ins is missing.");
+  const insSrc = disc.open(insPath);
+  const insBuf = new Uint8Array(insSrc.size);
+  insSrc.read(0, insBuf, 0, insBuf.length);
+  return planInstall(String.fromCharCode(...insBuf), language, true);
+}
+
 export function bootGame(o: BootOptions): Booted {
   const byUpper = new Map<string, string>();
   for (const p of o.disc.paths()) byUpper.set(p.toUpperCase(), p);
   const language = o.language ?? "English";
-  const insPath = byUpper.get("INSTDATA\\UBI.INS");
-  if (!insPath) throw new Error("This doesn't look like a Hype disc: InstData\\ubi.ins is missing.");
-  const insSrc = o.disc.open(insPath);
-  const insBuf = new Uint8Array(insSrc.size);
-  insSrc.read(0, insBuf, 0, insBuf.length);
-  const plan = planInstall(String.fromCharCode(...insBuf), language, true);
+  const plan = readInstallPlan(o.disc, language);
 
   const vfs = new VFS();
   vfs.addDrive({ letter: "C", type: DRIVE_FIXED, label: "SYSTEM", serial: 0x1234abcd, fs: "FAT32" });
