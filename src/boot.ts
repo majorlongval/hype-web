@@ -6,11 +6,14 @@ import { registerGdi32 } from "./win32/gdi32";
 import { registerWinmm } from "./win32/winmm";
 import { registerDinput } from "./win32/dinput";
 import { registerGlide3x } from "./win32/glide3x";
+import { registerAvifile } from "./win32/avifile";
 import { registerMisc } from "./win32/misc";
 import { planInstall, ubiIni, type InstallPlan } from "./install";
 import type { HleGen } from "./win32/thread";
 
 /** The player's game disc: a flat list of files addressed by relative path ("GameData\\Textures.cnt"). */
+const HYPE_CD_LABEL = "HYPE";
+
 export interface Disc {
   label: string;
   paths(): string[];
@@ -46,7 +49,7 @@ export function bootGame(o: BootOptions): Booted {
 
   const vfs = new VFS();
   vfs.addDrive({ letter: "C", type: DRIVE_FIXED, label: "SYSTEM", serial: 0x1234abcd, fs: "FAT32" });
-  vfs.addDrive({ letter: "D", type: DRIVE_CDROM, label: o.disc.label || plan.volumeName, serial: 0x0ce0beef, fs: "CDFS" });
+  vfs.addDrive({ letter: "D", type: DRIVE_CDROM, label: o.disc.label || HYPE_CD_LABEL, serial: 0x0ce0beef, fs: "CDFS" });
   for (const p of byUpper.values()) vfs.addFile(`D:\\${p}`, o.disc.open(p), true);
   vfs.mkdirp("C:\\WINDOWS\\SYSTEM");
   vfs.mkdirp("C:\\WINDOWS\\TEMP");
@@ -75,6 +78,7 @@ export function bootGame(o: BootOptions): Booted {
   registerDinput(m);
   registerGlide3x(m);
   registerMisc(m);
+  registerAvifile(m);
 
   const exePath = `${installDir}\\${plan.program}`;
   setupProcess(m, `"${exePath}"`, {
