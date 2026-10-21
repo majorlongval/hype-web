@@ -8,7 +8,7 @@ import { registerDinput } from "./win32/dinput";
 import { registerGlide3x } from "./win32/glide3x";
 import { registerAvifile } from "./win32/avifile";
 import { registerMisc } from "./win32/misc";
-import { planInstall, ubiIni, type InstallPlan } from "./install";
+import { planInstall, planRetailInstall, ubiIni, type InstallPlan } from "./install";
 import type { HleGen } from "./win32/thread";
 
 /** The player's game disc: a flat list of files addressed by relative path ("GameData\\Textures.cnt"). */
@@ -47,7 +47,13 @@ function loaderLabel(disc: Disc, path: string | undefined): string {
 export function readInstallPlan(disc: Disc, language = "English"): InstallPlan {
   const insPath = disc.paths().find((p) => p.toUpperCase() === "INSTDATA\\UBI.INS");
   if (!insPath && disc.paths().some((p) => p.toUpperCase() === "INSTDATA\\UBIINS.DAT")) {
-    throw new Error("This is the retail Hype CD. Its game program is locked by SafeDisc copy protection, which can't run here. The free demo disc works.");
+    const plan = planRetailInstall(disc.paths(), language);
+    const program = plan.files.find((f) => f.dst.toUpperCase() === plan.program.toUpperCase())!;
+    // A SafeDisc launcher is small and delegates to an encrypted ICD. It cannot run in this runtime.
+    if (disc.open(program.src).size < 1024 * 1024) {
+      throw new Error("This full-game disc still contains the SafeDisc launcher. Use a disc image with an unlocked MaiDFXvr_bleu.exe in exe\\Glide 3x.");
+    }
+    return plan;
   }
   if (!insPath) throw new Error("This doesn't look like a Hype disc: InstData\\ubi.ins is missing.");
   const insSrc = disc.open(insPath);

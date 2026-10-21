@@ -467,6 +467,9 @@ export function registerUser32(m0: Machine): void {
   };
 
   const u: Record<string, [number, (m: Machine, a: Args) => number | void | HleGen]> = {
+    // The host browser owns system-wide shortcuts; guests cannot reserve them.
+    RegisterHotKey: [16, (m) => { setError(m, 1409); return 0; }],
+    UnregisterHotKey: [8, () => 0],
     RegisterClassA: [4, (m, a) => regClass(m, a.u(0), false)],
     RegisterClassExA: [4, (m, a) => regClass(m, a.u(0), true)],
     UnregisterClassA: [8, (m, a) => {

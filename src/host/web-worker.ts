@@ -214,7 +214,7 @@ function tick(): void {
 async function start(msg: Extract<ToWorker, { t: "start" }>): Promise<void> {
   post({ t: "status", msg: "Reading disc…" });
   const disc = await openDisc(msg.disc);
-  const [saved, persist] = await openSaves(readInstallPlan(disc).volumeName || disc.label);
+  const [saved, persist] = await openSaves(readInstallPlan(disc, msg.language).volumeName || disc.label);
   const t0 = performance.now();
   const host = { now: () => performance.now() - t0, log };
   const booted = bootGame({ disc, host, language: msg.language, saved, persist });

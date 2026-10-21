@@ -1,6 +1,18 @@
 import type { Machine } from "./machine";
 
 export function registerMisc(m0: Machine): void {
+  // Retail imports these optional Windows components; unused exports remain strict missing-API thunks.
+  for (const dll of ["shell32.dll", "ole32.dll", "oleaut32.dll", "ddraw.dll", "quartz.dll"]) m0.register(dll, {});
+  m0.register("ole32.dll", {
+    CoInitialize: [4, () => 0],
+    CoUninitialize: [0, () => {}],
+    OleInitialize: [4, () => 0],
+    OleUninitialize: [0, () => {}],
+    CoCreateInstance: [20, (m, a) => {
+      m.mem.dv.setUint32(a.u(4), 0, true);
+      return 0x80040154; // REGDB_E_CLASSNOTREG: no registered host COM servers.
+    }],
+  });
   m0.register("msvfw32.dll", {
     MCIWndCreateA: [0, (m, a) => {
       m.log(`MCIWndCreate(${a.str(3)}) -> NULL (video not supported yet)`);

@@ -13,6 +13,30 @@ export interface InstallPlan {
   languages: string[];
 }
 
+/** Retail CDs store their installer script in ubiins.dat; mirror its full install layout. */
+export function planRetailInstall(paths: string[], language = "English"): InstallPlan {
+  const languages = [...new Set(paths.flatMap((p) => /^LangData\\([^\\]+)\\/i.exec(p)?.[1] ?? []))];
+  const selected = languages.find((l) => l.toLowerCase() === language.toLowerCase());
+  if (!selected) throw new Error(`Language ${language} is unavailable on this disc (available: ${languages.join(", ")}).`);
+  const files: InstallFile[] = [];
+  const add = (src: string, dst: string) => files.push({ src, dst });
+  for (const src of paths) {
+    if (/^GameData\\/i.test(src)) add(src, src);
+    else if (src.toLowerCase().startsWith(`langdata\\${selected.toLowerCase()}\\`)) {
+      add(src, `GameData\\${src.split("\\").slice(2).join("\\")}`);
+    } else if (/^(Sound|DLL)\\/i.test(src)) add(src, src);
+    else if (/^exe\\(DLL MFC|Glide 3x|UbiConfig|VidSelect)\\[^\\]+$/i.test(src) && !/\.icd$/i.test(src)) {
+      add(src, src.split("\\").at(-1)!);
+    } else if (/^exe\\GLI\.ini$/i.test(src)) add(src, "GLI.ini");
+  }
+  if (!files.some((f) => f.dst.toUpperCase() === "MAIDFXVR_BLEU.EXE")) {
+    throw new Error("The full disc is missing exe\\Glide 3x\\MaiDFXvr_bleu.exe.");
+  }
+  return { appName: "Hype - The Time Quest", volumeName: "HYPE", defaultPath: "\\UbiSoft\\Hype",
+    // Retail cinematics use DirectShow/DirectDraw, unlike the demo's AVIFile player.
+    program: "MaiDFXvr_bleu.exe", files, iniKeys: [["PlayVideo", "0"]], languages };
+}
+
 function sectionLines(lines: string[], start: number, endTag: string): [string[], number] {
   const out: string[] = [];
   let i = start;
