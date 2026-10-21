@@ -19,8 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-Files carrying an "SPDX-License-Identifier: LGPL-2.1-or-later" header
-(src/codecs/indeo5.ts, src/codecs/ivi.ts) are ports of FFmpeg's Indeo decoder
-and are licensed under the GNU Lesser General Public License version 2.1 or
-later instead; see COPYING.LGPLv2.1.
