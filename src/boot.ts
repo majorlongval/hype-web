@@ -34,17 +34,8 @@ export interface Booted {
 }
 
 export function bootGame(o: BootOptions): Booted {
-  const vfs = new VFS();
-  vfs.addDrive({ letter: "C", type: DRIVE_FIXED, label: "SYSTEM", serial: 0x1234abcd, fs: "FAT32" });
-  vfs.addDrive({ letter: "D", type: DRIVE_CDROM, label: o.disc.label, serial: 0x0ce0beef, fs: "CDFS" });
   const byUpper = new Map<string, string>();
-  for (const p of o.disc.paths()) {
-    byUpper.set(p.toUpperCase(), p);
-    vfs.addFile(`D:\\${p}`, o.disc.open(p), true);
-  }
-  vfs.mkdirp("C:\\WINDOWS\\SYSTEM");
-  vfs.mkdirp("C:\\WINDOWS\\TEMP");
-
+  for (const p of o.disc.paths()) byUpper.set(p.toUpperCase(), p);
   const language = o.language ?? "English";
   const insPath = byUpper.get("INSTDATA\\UBI.INS");
   if (!insPath) throw new Error("This doesn't look like a Hype disc: InstData\\ubi.ins is missing.");
@@ -52,6 +43,13 @@ export function bootGame(o: BootOptions): Booted {
   const insBuf = new Uint8Array(insSrc.size);
   insSrc.read(0, insBuf, 0, insBuf.length);
   const plan = planInstall(String.fromCharCode(...insBuf), language, true);
+
+  const vfs = new VFS();
+  vfs.addDrive({ letter: "C", type: DRIVE_FIXED, label: "SYSTEM", serial: 0x1234abcd, fs: "FAT32" });
+  vfs.addDrive({ letter: "D", type: DRIVE_CDROM, label: o.disc.label || plan.volumeName, serial: 0x0ce0beef, fs: "CDFS" });
+  for (const p of byUpper.values()) vfs.addFile(`D:\\${p}`, o.disc.open(p), true);
+  vfs.mkdirp("C:\\WINDOWS\\SYSTEM");
+  vfs.mkdirp("C:\\WINDOWS\\TEMP");
   const installDir = o.installDir ?? `C:${plan.defaultPath.startsWith("\\") ? "" : "\\"}${plan.defaultPath}`;
   for (const f of plan.files) {
     const src = byUpper.get(f.src.toUpperCase());

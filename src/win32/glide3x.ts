@@ -45,6 +45,7 @@ export interface GlideState {
   texVersion: number;
   clip: [number, number, number, number];
   enables: Set<number>;
+  version: number;
 }
 
 export interface GlideBackend {
@@ -83,6 +84,10 @@ export class NullBackend implements GlideBackend {
 
 export const TMU_MEM = 8 << 20;
 
+/** Fill value for write-locked LFB memory; pixels still holding it were not written by the game. */
+export const LFB_UNTOUCHED16 = 0xf81f;
+export const LFB_UNTOUCHED32 = 0x01fe01fe;
+
 export class Glide {
   backend: GlideBackend = new NullBackend();
   width = 640;
@@ -101,7 +106,7 @@ export class Glide {
     constantColor: 0xffffffff, blend: [1, 0, 1, 0], alphaTestFunc: 7, alphaRef: 0, depthMode: 0, depthFunc: 1,
     depthMask: false, depthBias: 0, colorMask: true, alphaMask: false, chromaMode: 0, chromaValue: 0, fogMode: 0,
     fogColor: 0, fogTable: new Uint8Array(64), cull: 0, clampS: 0, clampT: 0, minFilter: 1, magFilter: 1, mipMode: 0,
-    lodBias: 0, tex: null, texVersion: 0, clip: [0, 0, 640, 480], enables: new Set(),
+    lodBias: 0, tex: null, texVersion: 0, clip: [0, 0, 640, 480], enables: new Set(), version: 0,
   };
 }
 
@@ -153,7 +158,8 @@ function gatherVertex(m: Machine, g: Glide, p: number, out: Float32Array, o: num
   out[o + V_X] = f(0x01) ?? 0;
   out[o + V_Y] = f(0x01, 1) ?? 0;
   out[o + V_Z] = f(0x02) ?? 0;
-  const oow = f(0x03) ?? 1;
+  const q = f(0x04);
+  const oow = f(0x03) ?? q ?? 1;
   out[o + V_OOW] = oow;
   const pargb = L.get(0x30);
   if (pargb !== undefined) {
@@ -170,10 +176,10 @@ function gatherVertex(m: Machine, g: Glide, p: number, out: Float32Array, o: num
   }
   out[o + V_S0] = f(0x40) ?? 0;
   out[o + V_T0] = f(0x40, 1) ?? 0;
-  out[o + V_Q0] = f(0x50) ?? oow;
+  out[o + V_Q0] = f(0x50) ?? q ?? oow;
   out[o + V_S1] = f(0x41) ?? 0;
   out[o + V_T1] = f(0x41, 1) ?? 0;
-  out[o + V_Q1] = f(0x51) ?? oow;
+  out[o + V_Q1] = f(0x51) ?? q ?? oow;
   out[o + V_FOG] = f(0x05) ?? 0;
   if (g.coordSpace === 1) {
     const w = 1 / (oow || 1);
@@ -213,7 +219,11 @@ function expand(mode: number, ptrs: number[]): number[] {
 export function registerGlide3x(m0: Machine): void {
   const strings: Record<number, number> = {};
   const str = (m: Machine, id: number, s: string) => (strings[id] ??= m.sysString(s));
-  const st = (m: Machine) => glide(m).st;
+  const st = (m: Machine) => {
+    const s = glide(m).st;
+    s.version++;
+    return s;
+  };
   const fn: Record<string, [number, Impl]> = {
     grGlideInit: [0, () => {}],
     grGlideShutdown: [0, (m) => { glide(m).open = false; }],
@@ -385,7 +395,8 @@ export function registerGlide3x(m0: Machine): void {
       if (!write) {
         const px = g.backend.lfbRead(buffer, g.width, g.height);
         m.mem.u8.set(new Uint8Array(px.buffer, px.byteOffset, px.byteLength), g.lfbBuf);
-      } else m.mem.fill(g.lfbBuf, g.width * g.height * bpp, 0);
+      } else if (bpp === 2) new Uint16Array(m.mem.buf, g.lfbBuf, g.width * g.height).fill(LFB_UNTOUCHED16);
+      else new Uint32Array(m.mem.buf, g.lfbBuf, g.width * g.height).fill(LFB_UNTOUCHED32);
       g.lfbLock = { buffer, write, fmt: write ? fmt : 0 };
       const dv = m.mem.dv;
       dv.setUint32(info + 4, g.lfbBuf, true);

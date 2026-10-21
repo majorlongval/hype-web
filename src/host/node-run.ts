@@ -52,7 +52,7 @@ const t0 = performance.now();
 const now = () => performance.now() - t0 + skipped;
 const host = { now, log: (msg: string) => console.log(`[${(now() / 1000).toFixed(3)}] ${msg}`) };
 
-const { m } = bootGame({ disc: dirDisc(root, arg("label", "UBI SHAREWARE")), host });
+const { m } = bootGame({ disc: dirDisc(root, arg("label", "")), host });
 if (traceArg) m.trace = traceArg === "all" ? "all" : new Set(traceArg.split(","));
 
 const profFrom = Number(arg("prof", "0"));
