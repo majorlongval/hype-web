@@ -9,6 +9,11 @@ const playBtn = $<HTMLButtonElement>("play");
 const langSel = $<HTMLSelectElement>("lang");
 const statusEl = $<HTMLDivElement>("status");
 const statsEl = $<HTMLDivElement>("stats");
+const loadingEl = $<HTMLDivElement>("loading");
+const loadingStatus = $<HTMLSpanElement>("loading-status");
+const hud = $<HTMLDivElement>("hud");
+const volumeEl = $<HTMLInputElement>("volume");
+const fullscreenBtn = $<HTMLButtonElement>("fullscreen");
 const logEl = $<HTMLPreElement>("log");
 const stage = $<HTMLDivElement>("stage");
 const canvas = $<HTMLCanvasElement>("screen");
@@ -22,7 +27,19 @@ langSel.value = { fr: "French", de: "German", es: "Spanish", it: "Italian" }[lan
 
 function status(msg: string): void {
   statusEl.textContent = msg;
+  loadingStatus.textContent = msg;
 }
+
+function savedVolume(): number {
+  try {
+    const v = Number(localStorage.getItem("hype-volume"));
+    return localStorage.getItem("hype-volume") !== null && v >= 0 && v <= 1 ? v : 0.8;
+  } catch {
+    return 0.8;
+  }
+}
+
+statsEl.hidden = !params.has("stats");
 
 function addLog(msg: string): void {
   logEl.textContent += `${msg}\n`;
@@ -74,7 +91,17 @@ async function play(): Promise<void> {
   const audio = new AudioContext({ latencyHint: "interactive" });
   await audio.audioWorklet.addModule("audio-worklet.js");
   const node = new AudioWorkletNode(audio, "hype-audio", { numberOfInputs: 0, outputChannelCount: [2] });
-  node.connect(audio.destination);
+  const gain = audio.createGain();
+  gain.gain.value = savedVolume();
+  volumeEl.value = String(gain.gain.value);
+  volumeEl.addEventListener("input", () => {
+    gain.gain.value = Number(volumeEl.value);
+    try {
+      localStorage.setItem("hype-volume", volumeEl.value);
+    } catch {}
+  });
+  volumeEl.addEventListener("change", () => volumeEl.blur());
+  node.connect(gain).connect(audio.destination);
   const toAudio = (msg: ToWorklet, transfer: Transferable[] = []) => node.port.postMessage(msg, transfer);
 
   worker = new Worker("worker.js");
@@ -83,7 +110,9 @@ async function play(): Promise<void> {
     switch (msg.t) {
       case "log": addLog(msg.msg); break;
       case "status": status(msg.msg); break;
-      case "stats": statsEl.textContent = `${msg.fps.toFixed(1)} fps · ${msg.mips.toFixed(0)} MIPS · ${msg.draws.toFixed(0)} draws/frame`; break;
+      case "stats":
+        if (msg.fps > 0) loadingEl.hidden = true;
+        statsEl.textContent = `${msg.fps.toFixed(1)} fps · ${msg.mips.toFixed(0)} MIPS · ${msg.draws.toFixed(0)} draws/frame`; break;
       case "audio-open": toAudio({ t: "open", id: msg.id, rate: msg.rate, channels: msg.channels }); break;
       case "audio-data": toAudio({ t: "data", id: msg.id, data: msg.data }, [msg.data.buffer]); break;
       case "audio-close": toAudio({ t: "close", id: msg.id }); break;
@@ -94,7 +123,7 @@ async function play(): Promise<void> {
   };
   const [w, h] = deviceSize();
   const off = canvas.transferControlToOffscreen();
-  send({ t: "start", disc, canvas: off, width: w, height: h, language: langSel.value }, [off]);
+  send({ t: "start", disc, canvas: off, width: w, height: h, language: langSel.value, msaa: Number(params.get("msaa") ?? 4) }, [off]);
   new ResizeObserver(() => {
     const [cw, ch] = deviceSize();
     send({ t: "resize", width: cw, height: ch });
@@ -123,9 +152,21 @@ window.addEventListener("blur", () => {
   for (const code of Object.keys(KEYMAP)) send({ t: "key", code, down: false });
 });
 
-canvas.addEventListener("dblclick", () => {
+function toggleFullscreen(): void {
   if (document.fullscreenElement) document.exitFullscreen();
   else stage.requestFullscreen().catch(() => {});
+}
+canvas.addEventListener("dblclick", toggleFullscreen);
+fullscreenBtn.addEventListener("click", () => {
+  toggleFullscreen();
+  fullscreenBtn.blur();
+});
+
+let hudTimer = 0;
+stage.addEventListener("mousemove", () => {
+  hud.classList.add("show");
+  clearTimeout(hudTimer);
+  hudTimer = window.setTimeout(() => hud.classList.remove("show"), 2500);
 });
 
 let lastPad = "";

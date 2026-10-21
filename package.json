@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "node build.mjs && HYPE_DISC=${HYPE_DISC:-} node serve.mjs",
-    "headless": "node build.mjs && node dist/node-run.mjs"
+    "headless": "node build.mjs && node dist/node-run.mjs",
+    "release": "node build.mjs --minify"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

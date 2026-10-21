@@ -222,7 +222,7 @@ async function start(msg: Extract<ToWorker, { t: "start" }>): Promise<void> {
   const g = glide(m);
   msg.canvas.width = msg.width;
   msg.canvas.height = msg.height;
-  gfx = new WebGLGlide(msg.canvas, g);
+  gfx = new WebGLGlide(msg.canvas, g, msg.msaa);
   g.backend = gfx;
   mm(m).sink = new WorkerAudio();
   post({ t: "status", msg: `Running ${booted.plan.appName}` });

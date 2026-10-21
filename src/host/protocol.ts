@@ -4,7 +4,7 @@ export type DiscSpec =
   | { kind: "iso"; file: File };
 
 export type ToWorker =
-  | { t: "start"; disc: DiscSpec; canvas: OffscreenCanvas; width: number; height: number; language: string }
+  | { t: "start"; disc: DiscSpec; canvas: OffscreenCanvas; width: number; height: number; language: string; msaa: number }
   | { t: "key"; code: string; down: boolean }
   | { t: "resize"; width: number; height: number }
   | { t: "pad"; connected: boolean; buttons: number; axes: number[] }

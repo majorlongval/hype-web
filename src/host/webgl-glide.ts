@@ -270,15 +270,18 @@ export class WebGLGlide implements GlideBackend {
   private fogSrc: Uint8Array | null = null;
   private lfbTex: WebGLTexture;
   private readTarget: { fb: WebGLFramebuffer; rb: WebGLRenderbuffer } | null = null;
+  private resolved: { fb: WebGLFramebuffer; rb: WebGLRenderbuffer } | null = null;
+  private readonly samples: number;
   private aniso = 0;
   private warned = new Set<string>();
   drawCalls = 0;
   renderHeight = 0;
 
-  constructor(private canvas: OffscreenCanvas | HTMLCanvasElement, private glide: Glide) {
+  constructor(private canvas: OffscreenCanvas | HTMLCanvasElement, private glide: Glide, samples = 4) {
     const gl = canvas.getContext("webgl2", { antialias: false, depth: false, alpha: false, preserveDrawingBuffer: false }) as WebGL2RenderingContext | null;
     if (!gl) throw new Error("WebGL2 is not available");
     this.gl = gl;
+    this.samples = Math.max(0, Math.min(samples, gl.getParameter(gl.MAX_SAMPLES) as number));
     this.prog = compile(gl, VS, FS);
     for (const n of ["u_screen", "u_pointSize", "u_tex", "u_fogTex", "u_texOn", "u_texScale", "u_cc", "u_ac", "u_tc", "u_inv", "u_const",
       "u_alphaFunc", "u_alphaRef", "u_depthMode", "u_bias", "u_fogMode", "u_fogColor", "u_chroma", "u_chromaKey"]) {
@@ -352,14 +355,25 @@ export class WebGLGlide implements GlideBackend {
       gl.deleteRenderbuffer(t.depth);
     }
     this.targets = [];
+    if (this.resolved) {
+      gl.deleteFramebuffer(this.resolved.fb);
+      gl.deleteRenderbuffer(this.resolved.rb);
+    }
+    const rb = gl.createRenderbuffer()!;
+    gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, this.fbW, this.fbH);
+    const rfb = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, rfb);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb);
+    this.resolved = { fb: rfb, rb };
     for (let i = 0; i < 2; i++) {
       const fb = gl.createFramebuffer()!;
       const color = gl.createRenderbuffer()!;
       const depth = gl.createRenderbuffer()!;
       gl.bindRenderbuffer(gl.RENDERBUFFER, color);
-      gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, this.fbW, this.fbH);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER, this.samples, gl.RGBA8, this.fbW, this.fbH);
       gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
-      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, this.fbW, this.fbH);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER, this.samples, gl.DEPTH_COMPONENT24, this.fbW, this.fbH);
       gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
       gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, color);
       gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
@@ -423,8 +437,19 @@ export class WebGLGlide implements GlideBackend {
     this.batchVersion = -1;
   }
 
+  private resolve(index: number): WebGLFramebuffer {
+    const gl = this.gl;
+    const dst = this.resolved!.fb;
+    gl.disable(gl.SCISSOR_TEST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.targets[index].fb);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, dst);
+    gl.blitFramebuffer(0, 0, this.fbW, this.fbH, 0, 0, this.fbW, this.fbH, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    return dst;
+  }
+
   private present(index: number): void {
     const gl = this.gl;
+    const src = this.resolve(index);
     const cw = this.canvas.width, ch = this.canvas.height;
     const scale = Math.min(cw / this.fbW, ch / this.fbH);
     const w = Math.round(this.fbW * scale), h = Math.round(this.fbH * scale);
@@ -434,7 +459,7 @@ export class WebGLGlide implements GlideBackend {
     gl.colorMask(true, true, true, true);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.targets[index].fb);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, src);
     gl.blitFramebuffer(0, 0, this.fbW, this.fbH, x, y, x + w, y + h, gl.COLOR_BUFFER_BIT, w === this.fbW ? gl.NEAREST : gl.LINEAR);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
   }
@@ -711,12 +736,12 @@ export class WebGLGlide implements GlideBackend {
       this.readTarget = { fb, rb };
     }
     const { fb, rb } = this.readTarget;
+    const src = this.resolve(buffer === 0 ? this.back ^ 1 : this.back);
     gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, w, h);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fb);
     gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb);
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.targets[buffer === 0 ? this.back ^ 1 : this.back].fb);
-    gl.disable(gl.SCISSOR_TEST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, src);
     gl.blitFramebuffer(0, 0, this.fbW, this.fbH, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.LINEAR);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fb);
     const rgba = new Uint8Array(w * h * 4);
