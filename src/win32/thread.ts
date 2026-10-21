@@ -1,5 +1,6 @@
 import { KObject } from "./objects";
 import type { CPU } from "../cpu/cpu";
+import { STATE_BYTES, ST_REGS, ST_SEGBASE, initState } from "../cpu/state";
 
 /** What an HLE generator can ask the machine to do. */
 export type Req =
@@ -30,61 +31,26 @@ export interface WaitState {
 }
 
 export class CpuContext {
-  regs = new Int32Array(8);
+  readonly state = new Uint8Array(STATE_BYTES);
+  readonly regs = new Int32Array(this.state.buffer, ST_REGS, 8);
   eip = 0;
-  flags = 0x202;
-  lfOp = 0;
-  lfA = 0;
-  lfB = 0;
-  lfRes = 0;
-  lfSz = 4;
-  lfCin = 0;
-  lfOf = 0;
-  fsBase = 0;
-  fpuSt = new Float64Array(8);
-  fpuEmpty = new Uint8Array(8).fill(1);
-  fpuTop = 0;
-  fpuCw = 0x037f;
-  fpuSw = 0;
-  mmx = new Uint8Array(72);
+
+  constructor() {
+    initState(this.state, 0);
+  }
+
+  set fsBase(v: number) {
+    new DataView(this.state.buffer).setUint32(ST_SEGBASE + 16, v, true);
+  }
 
   save(c: CPU): void {
-    this.regs.set(c.r);
+    const b = c.mem.stateBase;
+    this.state.set(c.mem.u8.subarray(b, b + STATE_BYTES));
     this.eip = c.eip;
-    this.flags = c.flags;
-    this.lfOp = c.lfOp;
-    this.lfA = c.lfA;
-    this.lfB = c.lfB;
-    this.lfRes = c.lfRes;
-    this.lfSz = c.lfSz;
-    this.lfCin = c.lfCin;
-    this.lfOf = c.lfOf;
-    this.fsBase = c.segBase[4];
-    this.fpuSt.set(c.fpu.st);
-    this.fpuEmpty.set(c.fpu.empty);
-    this.fpuTop = c.fpu.top;
-    this.fpuCw = c.fpu.cw;
-    this.fpuSw = c.fpu.sw;
-    this.mmx.set(c.mmx.b);
   }
   load(c: CPU): void {
-    c.r.set(this.regs);
+    c.mem.u8.set(this.state, c.mem.stateBase);
     c.eip = this.eip;
-    c.flags = this.flags;
-    c.lfOp = this.lfOp;
-    c.lfA = this.lfA;
-    c.lfB = this.lfB;
-    c.lfRes = this.lfRes;
-    c.lfSz = this.lfSz;
-    c.lfCin = this.lfCin;
-    c.lfOf = this.lfOf;
-    c.segBase[4] = this.fsBase;
-    c.fpu.st.set(this.fpuSt);
-    c.fpu.empty.set(this.fpuEmpty);
-    c.fpu.top = this.fpuTop;
-    c.fpu.cw = this.fpuCw;
-    c.fpu.sw = this.fpuSw;
-    c.mmx.b.set(this.mmx);
   }
 }
 

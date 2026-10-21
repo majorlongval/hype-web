@@ -47,10 +47,11 @@ function diffRegion(u8: Uint8Array, base: number, before: Uint8Array, out: Map<n
   }
 }
 
-export function runVectors(file: string): { total: number; failures: string[]; byAsm: Map<string, number> } {
+export function runVectors(file: string, step?: (cpu: CPU) => void): { total: number; failures: string[]; byAsm: Map<string, number> } {
   const vecs: Vec[] = JSON.parse(readFileSync(file, "utf8"));
   const mem = new Memory(0x400000);
   const cpu = new CPU(mem);
+  const run = step ?? ((c: CPU) => c.step());
   const failures: string[] = [];
   const byAsm = new Map<string, number>();
   for (const v of vecs) {
@@ -68,7 +69,7 @@ export function runVectors(file: string): { total: number; failures: string[]; b
     cpu.fpu.reset();
     let err = "";
     try {
-      cpu.step();
+      run(cpu);
     } catch (e) {
       err = String(e);
     }

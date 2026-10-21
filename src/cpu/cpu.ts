@@ -2,6 +2,8 @@ import { Memory } from "./memory";
 import { FPU } from "./fpu";
 import { MMX } from "./mmx";
 import { decodeBlock, type Block } from "./decode";
+import { HOT, type Jit } from "./jit/jit";
+import { ST_FLAGS, ST_SEGBASE, initState } from "./state";
 
 export const CF = 0x1, PF = 0x4, AF = 0x10, ZF = 0x40, SF = 0x80, TF = 0x100, IF = 0x200, DF = 0x400, OF = 0x800;
 export const AC = 0x40000, ID = 0x200000;
@@ -38,19 +40,29 @@ export class CPU {
   readonly dv: DataView;
   readonly u8: Uint8Array;
   readonly r: Int32Array;
+  /** flags, lfOp, lfA, lfB, lfRes, lfSz, lfCin, lfOf as consecutive u32 in wasm memory. */
+  readonly s: Uint32Array;
   eip = 0;
 
-  flags = 0x202;
-  lfOp = LF_NONE;
-  lfA = 0;
-  lfB = 0;
-  lfRes = 0;
-  lfSz = 4;
-  lfCin = 0;
-  lfOf = 0;
+  get flags(): number { return this.s[0]; }
+  set flags(v: number) { this.s[0] = v; }
+  get lfOp(): number { return this.s[1]; }
+  set lfOp(v: number) { this.s[1] = v; }
+  get lfA(): number { return this.s[2]; }
+  set lfA(v: number) { this.s[2] = v; }
+  get lfB(): number { return this.s[3]; }
+  set lfB(v: number) { this.s[3] = v; }
+  get lfRes(): number { return this.s[4]; }
+  set lfRes(v: number) { this.s[4] = v; }
+  get lfSz(): number { return this.s[5]; }
+  set lfSz(v: number) { this.s[5] = v; }
+  get lfCin(): number { return this.s[6]; }
+  set lfCin(v: number) { this.s[6] = v; }
+  get lfOf(): number { return this.s[7]; }
+  set lfOf(v: number) { this.s[7] = v; }
 
   readonly seg = new Uint16Array(6);
-  readonly segBase = new Uint32Array(6);
+  readonly segBase: Uint32Array;
   readonly fpu: FPU;
   readonly mmx: MMX;
 
@@ -67,6 +79,9 @@ export class CPU {
   tscHz = 266e6;
   now: () => number = () => performance.now();
 
+  jit: Jit | null = null;
+  /** Number of blocks to interpret before entering compiled code again. */
+  jitOff = 0;
   curBlock: Block | null = null;
   curIdx = 0;
 
@@ -74,7 +89,10 @@ export class CPU {
     this.mem = mem;
     this.dv = mem.dv;
     this.u8 = mem.u8;
+    initState(mem.u8, mem.stateBase);
     this.r = new Int32Array(mem.buf, mem.stateBase, 8);
+    this.s = new Uint32Array(mem.buf, mem.stateBase + ST_FLAGS, 8);
+    this.segBase = new Uint32Array(mem.buf, mem.stateBase + ST_SEGBASE, 6);
     this.fpu = new FPU(this);
     this.mmx = new MMX(this);
     this.seg.set([0x23, 0x1b, 0x23, 0x23, 0x3b, 0x00]);
@@ -379,6 +397,7 @@ export class CPU {
   invalidate(start: number, len: number): void {
     const p0 = start >>> 12, p1 = (start + len + 0xfff) >>> 12;
     for (let p = p0 - 1; p <= p1; p++) if (p >= 0) this.pages[p] = undefined;
+    this.jit?.invalidate(start, len);
   }
 
   lookup(eip: number): Block {
@@ -402,6 +421,14 @@ export class CPU {
         continue;
       }
       const blk = this.lookup(eip);
+      if (blk.jit && this.jitOff === 0) {
+        const n = this.jit!.exec(blk.jit, budget);
+        budget -= n;
+        this.icount += n;
+        continue;
+      }
+      if (this.jitOff > 0) this.jitOff--;
+      else if (this.jit && ++blk.hits === HOT) this.jit.compile(eip);
       const insns = blk.insns;
       this.eip = blk.end;
       this.curBlock = blk;

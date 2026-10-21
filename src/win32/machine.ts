@@ -1,4 +1,5 @@
 import { Memory } from "../cpu/memory";
+import { Jit } from "../cpu/jit/jit";
 import { CPU, ESP, EAX, GuestFault } from "../cpu/cpu";
 import { AddressSpace, Heap, roundUp } from "./mm";
 import { parsePe, mapImage, type PeFile } from "./pe";
@@ -127,6 +128,8 @@ export class Machine {
     this.cpu.hleBase = HLE_BASE;
     this.cpu.hleSize = HLE_SLOTS * 16;
     this.cpu.onHle = (i) => this.onHle(i);
+    this.cpu.jit = new Jit(this.cpu);
+    this.cpu.jit.trace = (msg) => this.log(msg);
     this.cpu.now = () => host.now();
     this.cpu.tscBase = host.now();
     this.as = new AddressSpace(0x00400000, HLE_MODBASE);

@@ -1,5 +1,6 @@
 import type { CPU } from "./cpu";
 import { GuestFault } from "./cpu";
+import { ST_FPU_EMPTY, ST_FPU_ST, ST_FPU_TOP } from "./state";
 
 const f64 = new Float64Array(1);
 const f64u = new Uint32Array(f64.buffer);
@@ -8,16 +9,26 @@ const f32 = new Float32Array(1);
 const C0 = 0x100, C1 = 0x200, C2 = 0x400, C3 = 0x4000;
 
 export class FPU {
-  readonly st = new Float64Array(8);
+  readonly st: Float64Array;
   /** 1 = empty. */
-  readonly empty = new Uint8Array(8).fill(1);
-  top = 0;
-  cw = 0x037f;
-  sw = 0;
+  readonly empty: Uint8Array;
+  /** top, cw, sw as consecutive i32 in wasm memory. */
+  private readonly w: Int32Array;
   private readonly cpu: CPU;
+
+  get top(): number { return this.w[0]; }
+  set top(v: number) { this.w[0] = v; }
+  get cw(): number { return this.w[1]; }
+  set cw(v: number) { this.w[1] = v; }
+  get sw(): number { return this.w[2]; }
+  set sw(v: number) { this.w[2] = v; }
 
   constructor(cpu: CPU) {
     this.cpu = cpu;
+    const { buf, stateBase } = cpu.mem;
+    this.st = new Float64Array(buf, stateBase + ST_FPU_ST, 8);
+    this.empty = new Uint8Array(buf, stateBase + ST_FPU_EMPTY, 8);
+    this.w = new Int32Array(buf, stateBase + ST_FPU_TOP, 3);
   }
 
   reset(): void {

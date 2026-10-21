@@ -1,21 +1,29 @@
 import type { CPU } from "./cpu";
 import { GuestFault } from "./cpu";
+import { ST_MMX } from "./state";
 
 /** 8 MMX registers plus a scratch slot (index 8) used for memory source operands. */
 export class MMX {
-  readonly buf = new ArrayBuffer(72);
-  readonly b = new Uint8Array(this.buf);
-  readonly sb = new Int8Array(this.buf);
-  readonly w = new Uint16Array(this.buf);
-  readonly sw = new Int16Array(this.buf);
-  readonly d = new Uint32Array(this.buf);
-  readonly sd = new Int32Array(this.buf);
+  readonly b: Uint8Array;
+  readonly sb: Int8Array;
+  readonly w: Uint16Array;
+  readonly sw: Int16Array;
+  readonly d: Uint32Array;
+  readonly sd: Int32Array;
   private readonly cpu: CPU;
   private readonly tmp = new Uint8Array(8);
   private readonly tw = new Uint16Array(this.tmp.buffer);
 
   constructor(cpu: CPU) {
     this.cpu = cpu;
+    const { buf, stateBase } = cpu.mem;
+    const o = stateBase + ST_MMX;
+    this.b = new Uint8Array(buf, o, 72);
+    this.sb = new Int8Array(buf, o, 72);
+    this.w = new Uint16Array(buf, o, 36);
+    this.sw = new Int16Array(buf, o, 36);
+    this.d = new Uint32Array(buf, o, 18);
+    this.sd = new Int32Array(buf, o, 18);
   }
 
   enter(): void {

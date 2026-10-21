@@ -53,6 +53,7 @@ const now = () => performance.now() - t0 + skipped;
 const host = { now, log: (msg: string) => console.log(`[${(now() / 1000).toFixed(3)}] ${msg}`) };
 
 const { m } = bootGame({ disc: dirDisc(root, arg("label", "")), host });
+if (process.argv.includes("--nojit")) m.cpu.jit = null;
 if (traceArg) m.trace = traceArg === "all" ? "all" : new Set(traceArg.split(","));
 
 const profFrom = Number(arg("prof", "0"));
@@ -94,5 +95,6 @@ if (m.cpu.prof) {
   for (const [a, n] of blocks) console.log(`  blk ${hex(a)} ${(100 * n / total).toFixed(1)}% ${m.symbolize(a)}`);
 }
 const top = [...m.fns].filter((f) => f.calls > 0).sort((a, b) => b.calls - a.calls).slice(0, 25);
+if (m.cpu.jit) console.log(`jit: ${JSON.stringify(m.cpu.jit.stats)}`);
 console.log(`\nframes=${frames} guest-time=${(now() / 1000).toFixed(1)}s exited=${m.exited} code=${m.exitCode}`);
 console.log(top.map((f) => `${f.mod}!${f.name}=${f.calls}`).join(" "));

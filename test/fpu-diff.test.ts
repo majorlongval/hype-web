@@ -16,8 +16,7 @@ function ordered32(dv: DataView, off: number): number {
   return v < 0 ? -(v & 0x7fffffff) : v;
 }
 
-describe("x87 and MMX vs unicorn", () => {
-  it("matches reference vectors", () => {
+export function runFpuVectors(runCode?: (cpu: CPU, end: number) => void): { failures: string[]; byOp: Map<string, number>; total: number } {
     const vecs: Vec[] = JSON.parse(readFileSync("test/vectors/fpu-basic.json", "utf8"));
     const mem = new Memory(0x400000);
     const cpu = new CPU(mem);
@@ -40,7 +39,8 @@ describe("x87 and MMX vs unicorn", () => {
       const end = CODE + code.length;
       let err = "";
       try {
-        for (let i = 0; i < 100 && cpu.eip !== end; i++) cpu.step();
+        if (runCode) runCode(cpu, end);
+        else for (let i = 0; i < 100 && cpu.eip !== end; i++) cpu.step();
       } catch (e) {
         err = String(e);
       }
@@ -76,10 +76,16 @@ describe("x87 and MMX vs unicorn", () => {
         if (failures.length < 50) failures.push(`${v.asm}\n   in=${v.input.slice(0, 80)} :: ${probs.join("; ")}`);
       }
     }
+    return { failures, byOp, total: vecs.length };
+}
+
+describe("x87 and MMX vs unicorn", () => {
+  it("matches reference vectors", () => {
+    const { failures, byOp, total } = runFpuVectors();
     if (failures.length) {
       console.log([...byOp.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n}\t${k}`).join("\n"));
       console.log(failures.join("\n"));
     }
-    expect(failures.length, `${failures.length} of ${vecs.length} failed`).toBe(0);
+    expect(failures.length, `${failures.length} of ${total} failed`).toBe(0);
   }, 300000);
 });

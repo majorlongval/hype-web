@@ -10,10 +10,16 @@ export interface Insn {
   exec: Exec;
   flow: boolean;
 }
+export interface JitEntry {
+  fn: (pc: number) => number;
+  idx: number;
+}
 export interface Block {
   start: number;
   end: number;
   insns: Insn[];
+  hits: number;
+  jit: JitEntry | null;
 }
 
 type EA = (c: CPU) => number;
@@ -1280,5 +1286,5 @@ export function decodeBlock(c: CPU, addr: number, max = 64): Block {
     if (res.flow) break;
   }
   void LF_NONE;
-  return { start: addr, end: p, insns };
+  return { start: addr, end: p, insns, hits: 0, jit: null };
 }
