@@ -17,5 +17,6 @@
     "playwright-core": "^1.64.1",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
-  }
+  },
+  "license": "MIT AND LGPL-2.1-or-later"
 }
