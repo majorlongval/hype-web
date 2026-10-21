@@ -46,6 +46,9 @@ function loaderLabel(disc: Disc, path: string | undefined): string {
 
 export function readInstallPlan(disc: Disc, language = "English"): InstallPlan {
   const insPath = disc.paths().find((p) => p.toUpperCase() === "INSTDATA\\UBI.INS");
+  if (!insPath && disc.paths().some((p) => p.toUpperCase() === "INSTDATA\\UBIINS.DAT")) {
+    throw new Error("This is the retail Hype CD. Its game program is locked by SafeDisc copy protection, which can't run here. The free demo disc works.");
+  }
   if (!insPath) throw new Error("This doesn't look like a Hype disc: InstData\\ubi.ins is missing.");
   const insSrc = disc.open(insPath);
   const insBuf = new Uint8Array(insSrc.size);

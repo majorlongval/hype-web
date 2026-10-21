@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { bootGame, type Disc } from "../boot";
+import { IsoFileSource, readIso } from "../media/iso9660";
 import type { FileSource } from "../win32/vfs";
 import { hex } from "../win32/machine";
 import { glide, LFB_UNTOUCHED16, LFB_UNTOUCHED32, type GlideBackend } from "../win32/glide3x";
@@ -38,6 +39,17 @@ function dirDisc(root: string, label: string): Disc {
   };
 }
 
+function isoDisc(file: string, label: string): Disc {
+  const image = new NodeFile(file);
+  const iso = readIso(image);
+  const byUpper = new Map(iso.files.map((f) => [f.path.toUpperCase(), f]));
+  return {
+    label: label || iso.label,
+    paths: () => iso.files.map((f) => f.path),
+    open: (p) => new IsoFileSource(image, byUpper.get(p.toUpperCase())!),
+  };
+}
+
 function arg(name: string, def: string): string {
   const i = process.argv.indexOf(`--${name}`);
   return i > 0 ? process.argv[i + 1] : def;
@@ -57,8 +69,17 @@ const t0 = performance.now();
 const now = () => performance.now() - t0 + skipped;
 const host = { now, log: (msg: string) => console.log(`[${(now() / 1000).toFixed(3)}] ${msg}`) };
 
-const { m } = bootGame({ disc: dirDisc(root, arg("label", "")), host });
+const baseDisc = root.toLowerCase().endsWith(".iso") ? isoDisc(root, arg("label", "")) : dirDisc(root, arg("label", ""));
+const { m } = bootGame({ disc: baseDisc, host });
 if (process.argv.includes("--nojit")) m.cpu.jit = null;
+if (process.argv.includes("--trace-files")) {
+  const lookup = m.vfs.lookup.bind(m.vfs);
+  m.vfs.lookup = (p: string) => {
+    const n = lookup(p);
+    host.log(`file ${p}${n ? "" : " (missing)"}`);
+    return n;
+  };
+}
 if (traceArg) m.trace = traceArg === "all" ? "all" : new Set(traceArg.split(","));
 
 const profFrom = Number(arg("prof", "0"));
