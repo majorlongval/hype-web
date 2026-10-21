@@ -1,4 +1,4 @@
-import type { FileSource } from "../win32/vfs";
+import { type FileSource, readBytes } from "../win32/vfs";
 
 export interface AviChunk {
   off: number;
@@ -43,12 +43,6 @@ const AVIIF_KEYFRAME = 0x10;
 
 export function fourcc(u8: Uint8Array, off: number): string {
   return String.fromCharCode(u8[off], u8[off + 1], u8[off + 2], u8[off + 3]);
-}
-
-export function readBytes(src: FileSource, off: number, len: number): Uint8Array {
-  const buf = new Uint8Array(len);
-  const n = src.read(off, buf, 0, len);
-  return n === len ? buf : buf.subarray(0, n);
 }
 
 function streamOf(id: string): number {

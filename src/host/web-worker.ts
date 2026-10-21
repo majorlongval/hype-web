@@ -1,5 +1,6 @@
 import { bootGame, readInstallPlan, type Disc } from "../boot";
 import type { FileSource, PersistStore } from "../win32/vfs";
+import { IsoFileSource, readIso } from "../media/iso9660";
 import { glide } from "../win32/glide3x";
 import { mm, type AudioSink } from "../win32/winmm";
 import { injectKey } from "../win32/user32";
@@ -69,6 +70,16 @@ class HttpFile extends BlockFile {
 }
 
 async function openDisc(spec: DiscSpec): Promise<Disc> {
+  if (spec.kind === "iso") {
+    const image = new LocalFile(spec.file);
+    const iso = readIso(image);
+    const byUpper = new Map(iso.files.map((f) => [f.path.toUpperCase(), f]));
+    return {
+      label: iso.label,
+      paths: () => iso.files.map((f) => f.path),
+      open: (p) => new IsoFileSource(image, byUpper.get(p.toUpperCase())!),
+    };
+  }
   if (spec.kind === "files") {
     const map = new Map(spec.files.map(([p, f]) => [p.toUpperCase(), [p, f] as const]));
     return {
@@ -203,7 +214,7 @@ function tick(): void {
 async function start(msg: Extract<ToWorker, { t: "start" }>): Promise<void> {
   post({ t: "status", msg: "Reading disc…" });
   const disc = await openDisc(msg.disc);
-  const [saved, persist] = await openSaves(msg.disc.label || readInstallPlan(disc).volumeName);
+  const [saved, persist] = await openSaves(readInstallPlan(disc).volumeName || disc.label);
   const t0 = performance.now();
   const host = { now: () => performance.now() - t0, log };
   const booted = bootGame({ disc, host, language: msg.language, saved, persist });

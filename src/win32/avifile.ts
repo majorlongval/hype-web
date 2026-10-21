@@ -1,5 +1,6 @@
 import type { Machine } from "./machine";
-import { type AviFile, type AviStream, PcmTrack, parseAvi, readBytes } from "../media/avi";
+import { type AviFile, type AviStream, PcmTrack, parseAvi } from "../media/avi";
+import { readBytes } from "./vfs";
 import { type VideoDecoder, bitmapInfo, createVideoDecoder, dibStride } from "../codecs/video";
 
 const AVIERR_UNSUPPORTED = 0x80044065;

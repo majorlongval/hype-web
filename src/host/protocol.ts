@@ -1,6 +1,7 @@
 export type DiscSpec =
   | { kind: "files"; label: string; files: [string, File][] }
-  | { kind: "http"; label: string; base: string };
+  | { kind: "http"; label: string; base: string }
+  | { kind: "iso"; file: File };
 
 export type ToWorker =
   | { t: "start"; disc: DiscSpec; canvas: OffscreenCanvas; width: number; height: number; language: string }

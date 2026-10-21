@@ -4,6 +4,12 @@ export interface FileSource {
   read(offset: number, dst: Uint8Array, dstOff: number, len: number): number;
 }
 
+export function readBytes(src: FileSource, off: number, len: number): Uint8Array {
+  const buf = new Uint8Array(len);
+  const n = src.read(off, buf, 0, len);
+  return n === len ? buf : buf.subarray(0, n);
+}
+
 /** Where written files are persisted (save games, config). */
 export interface PersistStore {
   save(path: string, data: Uint8Array): void;

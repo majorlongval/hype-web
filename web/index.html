@@ -14,7 +14,7 @@
   label.pick, button { background: #f3c74e; color: #1a1408; border: 0; border-radius: 6px; padding: 10px 18px; font-weight: 600; cursor: pointer; font-size: 15px; }
   button:disabled { opacity: .4; cursor: default; }
   select { background: #1d1c24; color: inherit; border: 1px solid #3a3846; border-radius: 6px; padding: 8px; }
-  #picker { display: none; }
+  #picker, #iso { display: none; }
   #status { color: #cfc9b6; min-height: 1.4em; }
   .note { color: #8a8676; font-size: 13px; margin-top: 28px; }
   #stage { position: fixed; inset: 0; background: #000; }
@@ -31,12 +31,14 @@
   <div class="row">
     <label class="pick" for="picker">Choose your Hype CD folder…</label>
     <input id="picker" type="file" webkitdirectory multiple>
+    <label class="pick" for="iso">…or a disc image (.iso)</label>
+    <input id="iso" type="file" accept=".iso">
     <select id="lang" title="Language">
       <option>English</option><option>French</option><option>German</option><option>Spanish</option><option>Italian</option>
     </select>
   </div>
   <div class="row"><button id="play" disabled>Play</button></div>
-  <div id="status">Insert your disc and pick its root folder (the one containing <code>InstData</code>).</div>
+  <div id="status">Pick your disc's root folder (the one containing <code>InstData</code>), or a <code>.iso</code> image of it.</div>
   <p class="note">Game files stay on your computer; nothing is uploaded. Saves are kept in this browser's storage. Double-click the game to toggle full screen.</p>
 </div>
 <div id="stage" hidden><canvas id="screen"></canvas><div id="stats"></div></div>

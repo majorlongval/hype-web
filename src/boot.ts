@@ -36,6 +36,14 @@ export interface Booted {
   exe: GuestModule;
 }
 
+function loaderLabel(disc: Disc, path: string | undefined): string {
+  if (!path) return "";
+  const src = disc.open(path);
+  const b = new Uint8Array(Math.min(src.size, 64));
+  src.read(0, b, 0, b.length);
+  return String.fromCharCode(...b).split(/\r?\n/)[0].trim();
+}
+
 export function readInstallPlan(disc: Disc, language = "English"): InstallPlan {
   const insPath = disc.paths().find((p) => p.toUpperCase() === "INSTDATA\\UBI.INS");
   if (!insPath) throw new Error("This doesn't look like a Hype disc: InstData\\ubi.ins is missing.");
@@ -53,7 +61,7 @@ export function bootGame(o: BootOptions): Booted {
 
   const vfs = new VFS();
   vfs.addDrive({ letter: "C", type: DRIVE_FIXED, label: "SYSTEM", serial: 0x1234abcd, fs: "FAT32" });
-  vfs.addDrive({ letter: "D", type: DRIVE_CDROM, label: o.disc.label || HYPE_CD_LABEL, serial: 0x0ce0beef, fs: "CDFS" });
+  vfs.addDrive({ letter: "D", type: DRIVE_CDROM, label: o.disc.label || loaderLabel(o.disc, byUpper.get("LOADER.INI")) || HYPE_CD_LABEL, serial: 0x0ce0beef, fs: "CDFS" });
   for (const p of byUpper.values()) vfs.addFile(`D:\\${p}`, o.disc.open(p), true);
   vfs.mkdirp("C:\\WINDOWS\\SYSTEM");
   vfs.mkdirp("C:\\WINDOWS\\TEMP");

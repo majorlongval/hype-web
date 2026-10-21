@@ -4,6 +4,7 @@ import { KEYMAP } from "../win32/keys";
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const setup = $<HTMLDivElement>("setup");
 const picker = $<HTMLInputElement>("picker");
+const isoPicker = $<HTMLInputElement>("iso");
 const playBtn = $<HTMLButtonElement>("play");
 const langSel = $<HTMLSelectElement>("lang");
 const statusEl = $<HTMLDivElement>("status");
@@ -44,6 +45,14 @@ picker.addEventListener("change", () => {
   playBtn.disabled = false;
 });
 
+isoPicker.addEventListener("change", () => {
+  const file = isoPicker.files?.[0];
+  if (!file) return;
+  disc = { kind: "iso", file };
+  status(`${file.name} ready.`);
+  playBtn.disabled = false;
+});
+
 if (disc) {
   playBtn.disabled = false;
   status("Development disc from the local server.");
@@ -80,7 +89,7 @@ async function play(): Promise<void> {
       case "audio-close": toAudio({ t: "close", id: msg.id }); break;
       case "audio-reset": toAudio({ t: "reset", id: msg.id }); break;
       case "exit": status(`The game exited (code ${msg.code}).`); break;
-      case "error": status("The emulator stopped on an error (details in the log)."); addLog(msg.msg); break;
+      case "error": status(`Stopped: ${msg.msg.split("\n")[0]}`); addLog(msg.msg); break;
     }
   };
   const [w, h] = deviceSize();

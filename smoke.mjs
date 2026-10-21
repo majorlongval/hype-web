@@ -17,6 +17,7 @@ const page = await browser.newPage(process.env.PROFILE ? undefined : { viewport 
 page.on("console", (m) => console.log(`[console.${m.type()}] ${m.text()}`));
 page.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
 await page.goto(url);
+if (process.env.ISO) await page.setInputFiles("#iso", process.env.ISO);
 await page.click("#play");
 const t0 = Date.now();
 let k = 0;
