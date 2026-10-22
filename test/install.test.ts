@@ -21,7 +21,7 @@ describe("retail installation", () => {
     expect(plan.files).toContainEqual({ src: files[6], dst: files[6] });
     expect(plan.files).toContainEqual({ src: files[1], dst: "MAIDFXVR_BLEU.EXE" });
     expect(plan.files.some((f) => /French|\.ICD$/i.test(f.src))).toBe(false);
-    expect(ubiIni(plan, "C:\\UbiSoft\\Hype", "English")).toContain("PlayVideo=0");
+    expect(ubiIni(plan, "C:\\UbiSoft\\Hype", "English")).toContain("PlayVideo=1");
   });
 
   it("selects languages case-insensitively and rejects unavailable languages", () => {

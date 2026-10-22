@@ -33,8 +33,7 @@ export function planRetailInstall(paths: string[], language = "English"): Instal
     throw new Error("The full disc is missing exe\\Glide 3x\\MaiDFXvr_bleu.exe.");
   }
   return { appName: "Hype - The Time Quest", volumeName: "HYPE", defaultPath: "\\UbiSoft\\Hype",
-    // Retail cinematics use DirectShow/DirectDraw, unlike the demo's AVIFile player.
-    program: "MaiDFXvr_bleu.exe", files, iniKeys: [["PlayVideo", "0"]], languages };
+    program: "MaiDFXvr_bleu.exe", files, iniKeys: [], languages };
 }
 
 function sectionLines(lines: string[], start: number, endTag: string): [string[], number] {

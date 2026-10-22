@@ -8,6 +8,7 @@ import { registerDinput } from "./win32/dinput";
 import { registerGlide3x } from "./win32/glide3x";
 import { registerAvifile } from "./win32/avifile";
 import { registerMisc } from "./win32/misc";
+import { registerDirectShow } from "./win32/directshow";
 import { planInstall, planRetailInstall, ubiIni, type InstallPlan } from "./install";
 import type { HleGen } from "./win32/thread";
 
@@ -99,6 +100,7 @@ export function bootGame(o: BootOptions): Booted {
   registerDinput(m);
   registerGlide3x(m);
   registerMisc(m);
+  registerDirectShow(m);
   registerAvifile(m);
 
   const exePath = `${installDir}\\${plan.program}`;
