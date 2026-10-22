@@ -26,6 +26,10 @@ class HypeAudio extends AudioWorkletProcessor {
     super();
     this.port.onmessage = (e: MessageEvent<ToWorklet>) => {
       const msg = e.data;
+      if (msg.t === "reset-all") {
+        for (const s of this.streams.values()) Object.assign(s, { chunks: [], pos: 0, frames: 0, priming: true });
+        return;
+      }
       if (msg.t === "open") this.streams.set(msg.id, { rate: msg.rate, channels: msg.channels, chunks: [], pos: 0, frames: 0, priming: true });
       else if (msg.t === "close") this.streams.delete(msg.id);
       else if (msg.t === "reset") {

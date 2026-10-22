@@ -13,11 +13,14 @@ export type ToWorker =
   | { t: "mouse-button"; button: number; down: boolean }
   | { t: "mouse-move"; dx: number; dy: number }
   | { t: "mouse-wheel" }
+  | { t: "playback"; skipVideos: boolean; fastForward: boolean }
+  | { t: "skip-video" }
   | { t: "resize"; width: number; height: number }
   | { t: "pad"; connected: boolean; buttons: number; axes: number[] }
   | { t: "pause"; paused: boolean };
 
 export type FromWorker =
+  | { t: "playback-state"; video: boolean }
   | { t: "log"; msg: string }
   | { t: "status"; msg: string }
   | { t: "stats"; fps: number; mips: number; draws: number }
@@ -29,6 +32,7 @@ export type FromWorker =
   | { t: "error"; msg: string };
 
 export type ToWorklet =
+  | { t: "reset-all" }
   | { t: "open"; id: number; rate: number; channels: number }
   | { t: "data"; id: number; data: Float32Array }
   | { t: "close"; id: number }

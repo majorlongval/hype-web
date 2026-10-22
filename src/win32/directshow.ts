@@ -26,6 +26,11 @@ interface Movie {
 }
 interface ObjectState { refs: number; kind: string; surface?: Surface; movie?: Movie; target?: number }
 
+interface Playback { skipAll: boolean; skipCurrent(): boolean; readonly playing: boolean }
+export function videoPlayback(m: Machine): Playback {
+  return m.sub.videoPlayback ??= { skipAll: false, skipCurrent: () => false, playing: false };
+}
+
 /** DirectShow's legacy multimedia-stream API, backed by the same AVI/Indeo decoder as AVIFile. */
 export function registerDirectShow(m: Machine): void {
   const objects = new Map<number, ObjectState>();
@@ -42,6 +47,13 @@ export function registerDirectShow(m: Machine): void {
       movie.audioOpen = false;
     }
   };
+  const previous = videoPlayback(m);
+  const playing = () => [...objects.values()].filter((o) => o.kind === "multimedia" && o.movie?.running).map((o) => o.movie!);
+  m.sub.videoPlayback = {
+    skipAll: previous.skipAll,
+    get playing() { return playing().length > 0; },
+    skipCurrent() { const movies = playing(); for (const movie of movies) stop(movie); return movies.length > 0; },
+  } satisfies Playback;
   const base = (kind: string, iids: string[]): Method[] => [
     ["QueryInterface", 12, (_m, a) => {
       const id = readGuid(m, a.u(1));
@@ -169,6 +181,7 @@ export function registerDirectShow(m: Machine): void {
       }
       const due = movie.start + movie.frame * video.scale / video.rate * 1000;
       if (m.now() < due) yield* waitFor(m, [], false, due - m.now());
+      if (!movie.running) return END_OF_STREAM;
       // Decode all dependencies when the renderer falls behind the audio clock.
       const target = Math.min(video.chunks.length - 1, Math.max(movie.frame, Math.floor((m.now() - movie.start) * video.rate / video.scale / 1000)));
       while (movie.frame <= target) {
@@ -222,6 +235,7 @@ export function registerDirectShow(m: Machine): void {
     ["SetState", 8, (_m, a) => {
       const movie = get(a).movie!;
       if (!a.u(1)) { stop(movie); return 0; }
+      if (videoPlayback(m).skipAll) { stop(movie); return 0; }
       movie.running = true; movie.start = m.now(); movie.frame = 0; movie.sent = 0;
       if (movie.audio) {
         const pcm = movie.audio; mm(m).sink?.open(movie.audioId, pcm.rate, pcm.channels, 16); movie.audioOpen = true;

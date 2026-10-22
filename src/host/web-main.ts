@@ -26,11 +26,21 @@ const inputHint = $<HTMLDivElement>("input-hint");
 const mouseEnabled = $<HTMLInputElement>("mouse-enabled");
 const invertY = $<HTMLInputElement>("invert-y");
 const sensitivity = $<HTMLInputElement>("sensitivity");
+const tapAssist = $<HTMLInputElement>("tap-assist");
+const skipVideoBtn = $<HTMLButtonElement>("skip-video");
+const skipVideosSetup = $<HTMLInputElement>("skip-videos-setup");
+const skipVideosEl = $<HTMLInputElement>("skip-videos");
+const fastForwardBtn = $<HTMLButtonElement>("fast-forward");
+let skipVideos = false;
+try { skipVideos = localStorage.getItem("hype-skip-videos") === "true"; } catch {}
+let fastForward = false;
+let audioGain: GainNode | null = null;
+let resetAudio = () => {};
 let controlOptions: ControlOptions = { ...DEFAULT_CONTROLS };
 try {
   const saved = JSON.parse(localStorage.getItem("hype-controls") ?? "null");
   if (saved) controlOptions = { preset: saved.preset === "original" ? "original" : "modern", mouse: saved.mouse !== false,
-    invertY: saved.invertY === true, sensitivity: Math.max(0.25, Math.min(6, Number(saved.sensitivity) || 2)), typing: false };
+    invertY: saved.invertY === true, sensitivity: Math.max(0.25, Math.min(6, Number(saved.sensitivity) || 2)), typing: false, tapAssist: saved.tapAssist !== false };
 } catch {}
 let aiming = false;
 
@@ -108,10 +118,11 @@ async function play(): Promise<void> {
   await audio.audioWorklet.addModule("audio-worklet.js");
   const node = new AudioWorkletNode(audio, "hype-audio", { numberOfInputs: 0, outputChannelCount: [2] });
   const gain = audio.createGain();
+  audioGain = gain;
   gain.gain.value = savedVolume();
   volumeEl.value = String(gain.gain.value);
   volumeEl.addEventListener("input", () => {
-    gain.gain.value = Number(volumeEl.value);
+    gain.gain.value = fastForward ? 0 : Number(volumeEl.value);
     try {
       localStorage.setItem("hype-volume", volumeEl.value);
     } catch {}
@@ -119,19 +130,22 @@ async function play(): Promise<void> {
   volumeEl.addEventListener("change", () => volumeEl.blur());
   node.connect(gain).connect(audio.destination);
   const toAudio = (msg: ToWorklet, transfer: Transferable[] = []) => node.port.postMessage(msg, transfer);
+  resetAudio = () => toAudio({ t: "reset-all" });
 
   worker = new Worker("worker.js");
   updateControls();
+  updatePlayback();
   worker.onmessage = (e: MessageEvent<FromWorker>) => {
     const msg = e.data;
     switch (msg.t) {
       case "log": addLog(msg.msg); break;
       case "status": status(msg.msg); break;
+      case "playback-state": skipVideoBtn.disabled = !msg.video; break;
       case "stats":
         if (msg.fps > 0) loadingEl.hidden = true;
         statsEl.textContent = `${msg.fps.toFixed(1)} fps · ${msg.mips.toFixed(0)} MIPS · ${msg.draws.toFixed(0)} draws/frame`; break;
       case "audio-open": toAudio({ t: "open", id: msg.id, rate: msg.rate, channels: msg.channels }); break;
-      case "audio-data": toAudio({ t: "data", id: msg.id, data: msg.data }, [msg.data.buffer]); break;
+      case "audio-data": if (!fastForward) toAudio({ t: "data", id: msg.id, data: msg.data }, [msg.data.buffer]); break;
       case "audio-close": toAudio({ t: "close", id: msg.id }); break;
       case "audio-reset": toAudio({ t: "reset", id: msg.id }); break;
       case "exit": status(`The game exited (code ${msg.code}).`); break;
@@ -189,6 +203,7 @@ function updateControls(): void {
   mouseEnabled.checked = controlOptions.mouse;
   invertY.checked = controlOptions.invertY;
   sensitivity.value = String(controlOptions.sensitivity);
+  tapAssist.checked = controlOptions.tapAssist;
   $("modern-guide").hidden = controlOptions.preset !== "modern";
   $("original-guide").hidden = controlOptions.preset !== "original";
   typingBtn.hidden = controlOptions.preset !== "modern";
@@ -207,6 +222,23 @@ for (const sel of [preset, presetDialog]) sel.addEventListener("change", () => {
 mouseEnabled.addEventListener("change", () => { controlOptions.mouse = mouseEnabled.checked; updateControls(); });
 invertY.addEventListener("change", () => { controlOptions.invertY = invertY.checked; updateControls(); });
 sensitivity.addEventListener("input", () => { controlOptions.sensitivity = Number(sensitivity.value); updateControls(); });
+tapAssist.addEventListener("change", () => { controlOptions.tapAssist = tapAssist.checked; updateControls(); });
+function updatePlayback(): void {
+  skipVideosEl.checked = skipVideosSetup.checked = skipVideos;
+  fastForwardBtn.textContent = fastForward ? "Stop fast-forward" : "Fast-forward";
+  fastForwardBtn.setAttribute("aria-pressed", String(fastForward));
+  if (audioGain) audioGain.gain.value = fastForward ? 0 : Number(volumeEl.value);
+  send({ t: "playback", skipVideos, fastForward });
+  try { localStorage.setItem("hype-skip-videos", String(skipVideos)); } catch {}
+}
+for (const el of [skipVideosEl, skipVideosSetup]) el.addEventListener("change", () => {
+  skipVideos = el.checked; updatePlayback(); el.blur();
+});
+skipVideoBtn.addEventListener("click", () => { send({ t: "skip-video" }); skipVideoBtn.blur(); });
+fastForwardBtn.addEventListener("click", () => {
+  releaseInput(); fastForward = !fastForward; resetAudio(); updatePlayback(); fastForwardBtn.blur();
+});
+updatePlayback();
 function showControls(): void {
   releaseInput(); controlsDialog.showModal(); send({ t: "pause", paused: true });
 }

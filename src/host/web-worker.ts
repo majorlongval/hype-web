@@ -3,7 +3,9 @@ import type { FileSource, PersistStore } from "../win32/vfs";
 import { IsoFileSource, readIso } from "../media/iso9660";
 import { glide } from "../win32/glide3x";
 import { mm, type AudioSink } from "../win32/winmm";
-import { injectKey } from "../win32/user32";
+import { injectKey, u32 } from "../win32/user32";
+import { videoPlayback } from "../win32/directshow";
+import { GameClock } from "./game-clock";
 import { di, diKey } from "../win32/dinput";
 import { KEYMAP } from "../win32/keys";
 import { Controls } from "./controls";
@@ -168,6 +170,10 @@ const controls = new Controls((code, down) => {
 });
 let gfx: WebGLGlide | null = null;
 let paused = false;
+let clock: GameClock | null = null;
+let skipVideos = false;
+let fastForward = false;
+let lastVideoState: boolean | null = null;
 let frames = 0;
 let lastStats = performance.now();
 let lastInsns = 0;
@@ -202,6 +208,8 @@ function tick(): void {
     return;
   }
   const now = performance.now();
+  const video = videoPlayback(m).playing;
+  if (video !== lastVideoState) { lastVideoState = video; post({ t: "playback-state", video }); }
   if (now - lastStats >= 1000) {
     const dt = (now - lastStats) / 1000;
     post({ t: "stats", fps: frames / dt, mips: (m.cpu.icount - lastInsns) / dt / 1e6, draws: (gfx!.drawCalls - lastDraws) / Math.max(1, frames) });
@@ -215,7 +223,7 @@ function tick(): void {
     m = null;
     return;
   }
-  if (r === "idle") schedule(Math.max(1, Math.min(10, m.nextWake() - m.now())));
+  if (r === "idle") schedule(Math.max(1, Math.min(10, (m.nextWake() - m.now()) / (clock?.speed || 1))));
   else schedule(0);
 }
 
@@ -223,10 +231,17 @@ async function start(msg: Extract<ToWorker, { t: "start" }>): Promise<void> {
   post({ t: "status", msg: "Reading disc…" });
   const disc = await openDisc(msg.disc);
   const [saved, persist] = await openSaves(readInstallPlan(disc, msg.language).volumeName || disc.label);
-  const t0 = performance.now();
-  const host = { now: () => performance.now() - t0, log };
+  clock = new GameClock(() => performance.now());
+  clock.setSpeed(paused ? 0 : fastForward ? 4 : 1);
+  const host = { now: () => clock!.now(), log };
   const booted = bootGame({ disc, host, language: msg.language, saved, persist });
   m = booted.m;
+  videoPlayback(m).skipAll = skipVideos;
+  di(m).onKeyboardRead = () => controls.keyboardRead();
+  u32(m).onKeyboardRead = (vk) => {
+    const target = controls.options.preset === "modern" && !controls.options.typing ? 0x11 : 0x20;
+    if (vk === undefined || vk === target) controls.keyboardRead();
+  };
   const g = glide(m);
   msg.canvas.width = msg.width;
   msg.canvas.height = msg.height;
@@ -244,7 +259,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
       start(msg).catch((err: Error) => post({ t: "error", msg: err.stack ?? String(err) }));
       break;
     case "key": {
-      if (m) controls.key(msg.code, msg.down);
+      if (m) controls.key(msg.code, msg.down, performance.now());
       break;
     }
     case "controls": controls.configure(msg.options); break;
@@ -252,6 +267,15 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     case "mouse-button": if (m) controls.button(msg.button, msg.down); break;
     case "mouse-move": if (m) controls.move(msg.dx, msg.dy); break;
     case "mouse-wheel": if (m) controls.wheel(performance.now()); break;
+    case "playback":
+      skipVideos = msg.skipVideos; fastForward = msg.fastForward;
+      clock?.setSpeed(paused ? 0 : fastForward ? 4 : 1);
+      if (m) {
+        videoPlayback(m).skipAll = skipVideos;
+        if (skipVideos) videoPlayback(m).skipCurrent();
+      }
+      break;
+    case "skip-video": if (m) videoPlayback(m).skipCurrent(); break;
     case "resize":
       gfx?.resize(msg.width, msg.height);
       break;
@@ -265,6 +289,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     }
     case "pause":
       paused = msg.paused;
+      clock?.setSpeed(paused ? 0 : fastForward ? 4 : 1);
       if (!paused) schedule(0);
       break;
   }

@@ -24,6 +24,7 @@ interface Device {
 }
 
 export class DinputState {
+  onKeyboardRead?: () => void;
   keys = new Uint8Array(256);
   seq = 0;
   devices = new Map<number, Device>();
@@ -135,7 +136,10 @@ function makeDevice(m: Machine, kind: Kind, v2: boolean): number {
       if (!dev.acquired) return DIERR_NOTACQUIRED;
       const n = a.u(1), p = a.u(2), dv = mm.mem.dv;
       mm.mem.fill(p, n, 0);
-      if (kind === "keyboard") mm.mem.u8.set(s.keys.subarray(0, Math.min(256, n)), p);
+      if (kind === "keyboard") {
+        mm.mem.u8.set(s.keys.subarray(0, Math.min(256, n)), p);
+        s.onKeyboardRead?.();
+      }
       else if (kind === "mouse") {
         dv.setInt32(p, s.mouse.dx, true);
         dv.setInt32(p + 4, s.mouse.dy, true);
@@ -180,6 +184,7 @@ function makeDevice(m: Machine, kind: Kind, v2: boolean): number {
         n++;
       }
       if (!peek) dev.buffer.splice(0, n);
+      if (kind === "keyboard" && n > 0) s.onKeyboardRead?.();
       dv.setUint32(inout, n, true);
       return 0;
     }],

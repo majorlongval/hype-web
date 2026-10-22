@@ -53,6 +53,7 @@
   </div>
   <div class="row"><button id="play" disabled>Play</button></div>
   <div class="row"><label for="preset">Controls</label><select id="preset"><option value="modern">Modern keyboard + mouse</option><option value="original">Original keyboard</option></select><button id="controls-setup">View controls</button></div>
+  <div class="row"><label><input id="skip-videos-setup" type="checkbox"> Skip videos automatically</label></div>
   <div id="status">Pick your disc's root folder (the one containing <code>InstData</code>), or a <code>.iso</code> image of it.</div>
   <p class="note">Supports the demo and full-game discs with an unlocked Glide executable, including cutscenes.</p>
   <p class="note">Game files stay on your computer; nothing is uploaded. Saves are kept in this browser's storage. Move the mouse over the game for volume and full screen.</p>
@@ -60,7 +61,7 @@
 <div id="stage" hidden>
   <canvas id="screen"></canvas>
   <div id="loading"><b>Loading Hype…</b><span id="loading-status"></span></div>
-  <div id="hud"><label for="volume">Volume</label><input id="volume" type="range" min="0" max="1" step="0.05"><button id="fullscreen">Full screen</button><button id="controls-open">Controls</button><button id="typing" aria-pressed="false">Typing: off</button></div>
+  <div id="hud"><label for="volume">Volume</label><input id="volume" type="range" min="0" max="1" step="0.05"><button id="fullscreen">Full screen</button><button id="controls-open">Controls</button><button id="typing" aria-pressed="false">Typing: off</button><button id="skip-video" disabled>Skip video</button><label><input id="skip-videos" type="checkbox"> Auto-skip videos</label><button id="fast-forward" aria-pressed="false" title="Speed up in-game animations. Turn off before playing. Audio is muted while fast-forwarding.">Fast-forward</button></div>
   <div id="input-hint" hidden></div>
   <div id="stats" hidden></div>
 </div>
@@ -68,6 +69,8 @@
   <h2 id="controls-title">Controls</h2>
   <p>The game pauses while this panel is open.</p>
   <div class="row"><label for="preset-dialog">Preset</label><select id="preset-dialog"><option value="modern">Modern keyboard + mouse</option><option value="original">Original keyboard</option></select></div>
+  <div class="row"><label><input id="tap-assist" type="checkbox" checked> Space tap assistance (for tap-Space / hold-Alt keyboards)</label></div>
+  <p>Quick Space taps are kept long enough for the game to read them. Holding the key as Alt stays Alt. This assistance is off in Typing mode.</p>
   <div id="modern-guide">
     <table><tbody>
       <tr><th>Action</th><th>Your control</th><th>Game prompt</th></tr>
@@ -86,7 +89,8 @@
     <div class="row"><label for="sensitivity">Mouse sensitivity</label><input id="sensitivity" type="range" min="0.25" max="6" step="0.25" value="2"></div>
     <p>For player names, switch Typing on using the top bar or the backtick (`) key. Switch it off to resume modern controls. Tutorial prompts still show the original keys. This preset assumes the game's default English/QWERTY bindings.</p>
   </div>
-  <p id="original-guide" hidden>Original keys pass through unchanged. Rebind actions in the game's Configuration → Controls menu. Browser mouse aiming is off.</p>
+  <p id="original-guide" hidden>Original key bindings are preserved. Space tap assistance can be toggled above. Rebind actions in the game's Configuration → Controls menu. Browser mouse aiming is off.</p>
+  <p><b>Skip video</b> ends the current retail cutscene. <b>Auto-skip videos</b> remembers your preference. <b>Fast-forward</b> speeds up the game clock for in-game animations and mutes sound; click again before playing. It affects gameplay too, and speed depends on your computer.</p>
   <button id="controls-close">Done</button>
 </dialog>
 <details><summary>log</summary><pre id="log"></pre></details>

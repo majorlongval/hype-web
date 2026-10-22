@@ -4,6 +4,18 @@ Choose **Modern keyboard + mouse** before Play, or open **Controls** in the game
 
 The modern preset assumes the game's default English/QWERTY bindings. If you previously rebound actions in the game's Configuration → Controls menu, restore its defaults or choose Original keyboard.
 
+## Tap-Space / hold-Alt keyboards
+
+**Space tap assistance** is enabled by default in both presets. Some tap/hold keyboards emit a Space press and release almost simultaneously. The wrapper retains that press for at least 140 ms and until a keyboard poll has observed it (with a bounded timeout if the game does not poll). This lets the game detect taps even when both browser events arrive between frames. In Modern controls, Space still means jump; in Original controls it still means action.
+
+An Alt event is never converted into Space or jump. The keyboard firmware continues to choose tap versus hold. Typing mode bypasses assistance. Disable the option in the Controls panel if you prefer unmodified timing. Losing focus or changing controls clears pending taps immediately.
+
+## Skipping and fast-forwarding
+
+The top bar offers **Skip video** while a retail AVI is playing. It ends the current movie and its audio without altering game data. **Auto-skip videos** suppresses future retail videos, including the intro and ending, and remembers your preference. This option is also available before Play. Turn it off when you want to watch them again. The demo uses a separate AVIFile player; these video skip controls target the full retail game.
+
+**Fast-forward** advances the guest clock at four times its normal rate. Use it for in-engine opening scenes and animations that cannot safely be cut out. This does not jump over their scripts, and CPU-bound or frame-driven animations may speed up less. It affects gameplay too: click **Stop fast-forward** before playing normally. Sound is muted and queued audio is cleared while fast-forwarding. Fast-forward starts off each session and pauses with the game.
+
 | Action | Modern control | Original prompt |
 | --- | --- | --- |
 | Move / turn | WASD or arrows | Arrows |

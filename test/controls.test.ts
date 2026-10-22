@@ -10,7 +10,10 @@ function input() {
 describe("browser control presets", () => {
   it("maps movement, jump, action and the inaccessible numpad look key", () => {
     const { controls, events } = input();
-    for (const code of ["KeyW", "Space", "KeyE", "KeyC", "KeyM"]) { controls.key(code, true); controls.key(code, false); }
+    for (const code of ["KeyW", "Space", "KeyE", "KeyC", "KeyM"]) {
+      controls.key(code, true); controls.key(code, false);
+      if (code === "Space") { controls.keyboardRead(); controls.tick(140); }
+    }
     expect(events).toEqual([...["ArrowUp", "ControlLeft", "Space", "Numpad0", "End"].flatMap((code) => [[code, true], [code, false]])]);
   });
   it("preserves original keys and supports typing names without aliases", () => {
@@ -56,5 +59,40 @@ describe("browser control presets", () => {
     const { controls, events } = input();
     controls.wheel(100); controls.tick(200); controls.tick(300);
     expect(events).toEqual([["Delete", true], ["Delete", false]]);
+  });
+  it("holds a firmware Space tap until the game samples it and the minimum press expires", () => {
+    const { controls, events } = input();
+    controls.key("Space", true, 100); controls.key("Space", false, 101);
+    controls.tick(300);
+    expect(events).toEqual([["ControlLeft", true]]);
+    controls.keyboardRead(); controls.tick(301);
+    expect(events).toEqual([["ControlLeft", true], ["ControlLeft", false]]);
+    controls.key("Space", true, 400); controls.key("Space", false, 401); controls.keyboardRead();
+    controls.tick(500);
+    expect(events.at(-1)).toEqual(["ControlLeft", true]);
+    controls.tick(540);
+    expect(events.at(-1)).toEqual(["ControlLeft", false]);
+  });
+  it("preserves Alt holds, typing, original Space, and immediate releases when tap assistance is disabled", () => {
+    const { controls, events } = input();
+    controls.key("AltLeft", true, 100); controls.key("AltLeft", false, 500);
+    expect(events).toEqual([["AltLeft", true], ["AltLeft", false]]);
+    controls.configure({ ...DEFAULT_CONTROLS, preset: "original" });
+    controls.key("Space", true, 600); controls.key("Space", false, 601);
+    controls.keyboardRead(); controls.tick(740);
+    expect(events.slice(-2)).toEqual([["Space", true], ["Space", false]]);
+    controls.configure({ ...DEFAULT_CONTROLS, tapAssist: false });
+    controls.key("Space", true, 800); controls.key("Space", false, 801);
+    expect(events.slice(-2)).toEqual([["ControlLeft", true], ["ControlLeft", false]]);
+    controls.configure({ ...DEFAULT_CONTROLS, typing: true });
+    controls.key("Space", true, 900); controls.key("Space", false, 901);
+    expect(events.slice(-2)).toEqual([["Space", true], ["Space", false]]);
+  });
+  it("cancels pending taps on focus loss and bounds presses if the game never polls", () => {
+    const { controls, events } = input();
+    controls.key("Space", true, 100); controls.key("Space", false, 101); controls.reset(); controls.tick(2000);
+    expect(events).toEqual([["ControlLeft", true], ["ControlLeft", false]]);
+    controls.key("Space", true, 2000); controls.key("Space", false, 2001); controls.tick(3140);
+    expect(events.slice(-2)).toEqual([["ControlLeft", true], ["ControlLeft", false]]);
   });
 });

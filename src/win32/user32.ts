@@ -66,6 +66,7 @@ interface Hook { id: number; type: number; proc: number; thread: number }
 interface Timer { hwnd: number; id: number; interval: number; next: number; proc: number; thread: Thread }
 
 export class User32State {
+  onKeyboardRead?: (vk?: number) => void;
   classes = new Map<string, WndClass>();
   windows = new Map<number, Wnd>();
   nextHwnd = 0x10010;
@@ -924,11 +925,15 @@ export function registerUser32(m0: Machine): void {
     SetCursorPos: [8, (m, a) => { const s = u32(m); s.cursorPos = { x: a.i(0), y: a.i(1) }; return 1; }],
     ClipCursor: [4, () => 1],
     GetKeyState: [4, (m, a) => {
+      u32(m).onKeyboardRead?.(a.u(0) & 0xff);
       const v = u32(m).keyState[a.u(0) & 0xff];
       return ((v & 0x80 ? 0xff80 : 0) | (v & 1)) << 16 >> 16;
     }],
-    GetAsyncKeyState: [4, (m, a) => ((u32(m).keyState[a.u(0) & 0xff] & 0x80) ? 0x8000 : 0)],
-    GetKeyboardState: [4, (m, a) => { m.mem.u8.set(u32(m).keyState, a.u(0)); return 1; }],
+    GetAsyncKeyState: [4, (m, a) => {
+      u32(m).onKeyboardRead?.(a.u(0) & 0xff);
+      return (u32(m).keyState[a.u(0) & 0xff] & 0x80) ? 0x8000 : 0;
+    }],
+    GetKeyboardState: [4, (m, a) => { m.mem.u8.set(u32(m).keyState, a.u(0)); u32(m).onKeyboardRead?.(); return 1; }],
     SetKeyboardState: [4, (m, a) => { u32(m).keyState.set(m.mem.u8.subarray(a.u(0), a.u(0) + 256)); return 1; }],
     GetKeyboardLayoutNameA: [4, (m, a) => { m.mem.writeCString(a.u(0), "00000409"); return 1; }],
     GetKeyboardLayout: [4, () => 0x04090409],

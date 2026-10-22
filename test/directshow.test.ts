@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, expect, it } from "vitest";
 import { Args, HLE_BASE, Machine } from "../src/win32/machine";
-import { registerDirectShow } from "../src/win32/directshow";
+import { registerDirectShow, videoPlayback } from "../src/win32/directshow";
 import { writeGuid } from "../src/win32/com";
 import { DRIVE_FIXED, MemSource, VFS } from "../src/win32/vfs";
 import { glide, NullBackend } from "../src/win32/glide3x";
@@ -94,4 +94,26 @@ it("plays multimedia samples with RGB pixels, timed PCM, end-of-stream, and a se
     method(sample, 2); method(stream, 2); method(movie, 2);
   }
   expect([opened, closed, reset]).toEqual([2, 2, 2]);
+  const movie = create("49C47CE5-9BA4-11D0-8212-00C04FC32C45");
+  const name = m.sysAlloc(32); m.mem.u8.set(Buffer.from("movie.avi\0", "utf16le"), name);
+  expect(method(movie, 16, name, 0)).toBe(0);
+  writeGuid(m, guid, "A35FF56A-9FDA-11D0-8FDF-00C04FD9189D");
+  method(movie, 4, guid, out); const stream = u32(out);
+  method(stream, 13, 0, 0, 0, out); const sample = u32(out);
+  method(movie, 7, 1);
+  expect(videoPlayback(m).playing).toBe(true);
+  expect(videoPlayback(m).skipCurrent()).toBe(true);
+  expect(videoPlayback(m).playing).toBe(false);
+  expect(method(sample, 6, 0, 0, 0, 0)).toBe(0x40003);
+  expect([opened, closed, reset]).toEqual([3, 3, 3]);
+  videoPlayback(m).skipAll = true;
+  method(movie, 7, 1);
+  expect(method(sample, 6, 0, 0, 0, 0)).toBe(0x40003);
+  expect(opened).toBe(3); // Suppressed videos never queue audio.
+  videoPlayback(m).skipAll = false;
+  method(movie, 7, 1);
+  expect(videoPlayback(m).playing).toBe(true);
+  expect(opened).toBe(4);
+  method(movie, 7, 0);
+  method(sample, 2); method(stream, 2); method(movie, 2);
 });
