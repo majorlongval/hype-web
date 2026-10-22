@@ -238,7 +238,10 @@ async function start(msg: Extract<ToWorker, { t: "start" }>): Promise<void> {
   m = booted.m;
   videoPlayback(m).skipAll = skipVideos;
   di(m).onKeyboardRead = () => controls.keyboardRead();
-  u32(m).onKeyboardRead = (vk) => { if (vk === undefined || vk === 0x20) controls.keyboardRead(); };
+  u32(m).onKeyboardRead = (vk) => {
+    const target = controls.options.preset === "modern" && !controls.options.typing ? 0x11 : 0x20;
+    if (vk === undefined || vk === target) controls.keyboardRead();
+  };
   const g = glide(m);
   msg.canvas.width = msg.width;
   msg.canvas.height = msg.height;

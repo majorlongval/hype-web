@@ -210,7 +210,7 @@ function updateControls(): void {
   typingBtn.textContent = `Typing: ${controlOptions.typing ? "on" : "off"}`;
   typingBtn.setAttribute("aria-pressed", String(controlOptions.typing));
   inputHint.hidden = controlOptions.preset !== "modern";
-  inputHint.textContent = controlOptions.typing ? "Typing mode — press ` or Typing to resume modern controls" : "WASD move / turn · Space or E action · Ctrl jump · Hold right mouse to look · Controls in top bar";
+  inputHint.textContent = controlOptions.typing ? "Typing mode — press ` or Typing to resume modern controls" : "WASD move / turn · Space jump · E or click = game's SPACE (action, dialogue) · Hold right mouse to look · Controls in top bar";
   send({ t: "controls", options: controlOptions });
   try { localStorage.setItem("hype-controls", JSON.stringify({ ...controlOptions, typing: false })); } catch {}
 }
