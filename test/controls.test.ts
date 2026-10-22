@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Controls, DEFAULT_CONTROLS } from "../src/host/controls";
+import { buttonChanges, Controls, DEFAULT_CONTROLS } from "../src/host/controls";
 
 function input() {
   const events: [string, boolean][] = [];
@@ -105,5 +105,13 @@ describe("browser control presets", () => {
     expect(events).toEqual([["ControlLeft", true], ["ControlLeft", false]]);
     controls.key("Space", true, 2000); controls.key("Space", false, 2001); controls.tick(3140);
     expect(events.slice(-2)).toEqual([["ControlLeft", true], ["ControlLeft", false]]);
+  });
+  it("turns PointerEvent button masks into presses and releases, including a left click while aiming", () => {
+    expect(buttonChanges(0, 2)).toEqual([[2, true]]);
+    expect(buttonChanges(2, 3)).toEqual([[0, true]]);
+    expect(buttonChanges(3, 2)).toEqual([[0, false]]);
+    expect(buttonChanges(2, 0)).toEqual([[2, false]]);
+    expect(buttonChanges(0, 7)).toEqual([[0, true], [1, true], [2, true]]);
+    expect(buttonChanges(5, 5)).toEqual([]);
   });
 });

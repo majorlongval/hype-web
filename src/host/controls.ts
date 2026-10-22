@@ -9,6 +9,13 @@ export const MODERN_KEYS: Record<string, string> = {
   KeyZ: "KeyA", KeyX: "KeyS",
 };
 
+const MOUSE_BITS: [number, number][] = [[1, 0], [4, 1], [2, 2]];
+
+/** Presses and releases between two PointerEvent.buttons masks; a second button pressed mid-drag only shows up here. */
+export function buttonChanges(before: number, after: number): [number, boolean][] {
+  return MOUSE_BITS.filter(([bit]) => (before & bit) !== (after & bit)).map(([bit, button]) => [button, (after & bit) !== 0]);
+}
+
 /** Tracks separate input sources so releasing a mouse button cannot release a held keyboard action. */
 export class Controls {
   options = { ...DEFAULT_CONTROLS };

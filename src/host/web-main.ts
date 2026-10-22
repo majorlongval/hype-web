@@ -1,6 +1,6 @@
 import type { DiscSpec, FromWorker, ToWorker, ToWorklet } from "./protocol";
 import { KEYMAP } from "../win32/keys";
-import { DEFAULT_CONTROLS, type ControlOptions, type Preset } from "./controls";
+import { buttonChanges, DEFAULT_CONTROLS, type ControlOptions, type Preset } from "./controls";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const setup = $<HTMLDivElement>("setup");
@@ -43,6 +43,7 @@ try {
     invertY: saved.invertY === true, sensitivity: Math.max(0.25, Math.min(6, Number(saved.sensitivity) || 2)), typing: false, tapAssist: saved.tapAssist !== false };
 } catch {}
 let aiming = false;
+let mouseButtons = 0;
 
 const params = new URLSearchParams(location.search);
 let disc: DiscSpec | null = params.get("disc") === "http" ? { kind: "http", label: params.get("label") ?? "", base: "/disc/" } : null;
@@ -193,6 +194,7 @@ window.addEventListener("blur", releaseInput);
 
 function releaseInput(): void {
   aiming = false;
+  mouseButtons = 0;
   send({ t: "input-reset" });
   if (document.pointerLockElement === canvas) document.exitPointerLock();
 }
@@ -250,32 +252,35 @@ controlsDialog.addEventListener("close", () => {
 });
 const useMouse = () => !!worker && !controlsDialog.open && controlOptions.preset === "modern" && controlOptions.mouse && !controlOptions.typing;
 canvas.addEventListener("contextmenu", (e) => { if (useMouse()) e.preventDefault(); });
-canvas.addEventListener("pointerdown", (e) => {
-  if (!useMouse() || e.pointerType !== "mouse") return;
-  e.preventDefault();
-  canvas.setPointerCapture(e.pointerId);
-  send({ t: "mouse-button", button: e.button, down: true });
-  if (e.button === 2) {
-    aiming = true;
+function syncButtons(e: PointerEvent): void {
+  for (const [button, down] of buttonChanges(mouseButtons, e.buttons)) {
+    send({ t: "mouse-button", button, down });
+    if (button !== 2) continue;
+    aiming = down;
+    if (!down) {
+      if (document.pointerLockElement === canvas) document.exitPointerLock();
+      continue;
+    }
     // Right-drag remains available in browsers that do not grant pointer lock.
     try {
       const request = canvas.requestPointerLock?.() as Promise<void> | undefined;
       request?.then(() => { if (!aiming && document.pointerLockElement === canvas) document.exitPointerLock(); }).catch(() => {});
     } catch {}
   }
-});
-window.addEventListener("pointerup", (e) => {
+  mouseButtons = e.buttons;
+}
+canvas.addEventListener("pointerdown", (e) => {
   if (!useMouse() || e.pointerType !== "mouse") return;
-  send({ t: "mouse-button", button: e.button, down: false });
-  if (e.button === 2) {
-    aiming = false;
-    if (document.pointerLockElement === canvas) document.exitPointerLock();
-  }
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  syncButtons(e);
 });
+window.addEventListener("pointermove", (e) => { if (mouseButtons && useMouse() && e.pointerType === "mouse") syncButtons(e); });
+window.addEventListener("pointerup", (e) => { if (mouseButtons && useMouse() && e.pointerType === "mouse") syncButtons(e); });
 canvas.addEventListener("pointercancel", releaseInput);
 document.addEventListener("pointerlockchange", () => {
   if (document.pointerLockElement !== canvas && aiming) {
-    aiming = false; send({ t: "input-reset", mouseOnly: true });
+    aiming = false; mouseButtons = 0; send({ t: "input-reset", mouseOnly: true });
   }
 });
 document.addEventListener("mousemove", (e) => {
