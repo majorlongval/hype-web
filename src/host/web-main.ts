@@ -1,5 +1,6 @@
 import type { DiscSpec, FromWorker, ToWorker, ToWorklet } from "./protocol";
 import { KEYMAP } from "../win32/keys";
+import { DEFAULT_CONTROLS, type ControlOptions, type Preset } from "./controls";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const setup = $<HTMLDivElement>("setup");
@@ -17,6 +18,21 @@ const fullscreenBtn = $<HTMLButtonElement>("fullscreen");
 const logEl = $<HTMLPreElement>("log");
 const stage = $<HTMLDivElement>("stage");
 const canvas = $<HTMLCanvasElement>("screen");
+const preset = $<HTMLSelectElement>("preset");
+const presetDialog = $<HTMLSelectElement>("preset-dialog");
+const controlsDialog = $<HTMLDialogElement>("controls-dialog");
+const typingBtn = $<HTMLButtonElement>("typing");
+const inputHint = $<HTMLDivElement>("input-hint");
+const mouseEnabled = $<HTMLInputElement>("mouse-enabled");
+const invertY = $<HTMLInputElement>("invert-y");
+const sensitivity = $<HTMLInputElement>("sensitivity");
+let controlOptions: ControlOptions = { ...DEFAULT_CONTROLS };
+try {
+  const saved = JSON.parse(localStorage.getItem("hype-controls") ?? "null");
+  if (saved) controlOptions = { preset: saved.preset === "original" ? "original" : "modern", mouse: saved.mouse !== false,
+    invertY: saved.invertY === true, sensitivity: Math.max(0.25, Math.min(6, Number(saved.sensitivity) || 2)), typing: false };
+} catch {}
+let aiming = false;
 
 const params = new URLSearchParams(location.search);
 let disc: DiscSpec | null = params.get("disc") === "http" ? { kind: "http", label: params.get("label") ?? "", base: "/disc/" } : null;
@@ -52,9 +68,9 @@ picker.addEventListener("change", () => {
   if (!list.length) return;
   const strip = (p: string) => p.split("/").slice(1).join("\\");
   const files: [string, File][] = list.map((f) => [strip(f.webkitRelativePath || f.name), f]);
-  const root = files.find(([p]) => p.toUpperCase() === "INSTDATA\\UBI.INS");
+  const root = files.find(([p]) => ["INSTDATA\\UBI.INS", "INSTDATA\\UBIINS.DAT"].includes(p.toUpperCase()));
   if (!root) {
-    status("That folder isn't a Hype disc: InstData\\ubi.ins was not found. Pick the root folder of the CD.");
+    status("That folder isn't a Hype disc: its InstData installer files were not found. Pick the root folder of the CD.");
     return;
   }
   disc = { kind: "files", label: "", files };
@@ -105,6 +121,7 @@ async function play(): Promise<void> {
   const toAudio = (msg: ToWorklet, transfer: Transferable[] = []) => node.port.postMessage(msg, transfer);
 
   worker = new Worker("worker.js");
+  updateControls();
   worker.onmessage = (e: MessageEvent<FromWorker>) => {
     const msg = e.data;
     switch (msg.t) {
@@ -129,7 +146,8 @@ async function play(): Promise<void> {
     send({ t: "resize", width: cw, height: ch });
   }).observe(stage);
   document.addEventListener("visibilitychange", () => {
-    send({ t: "pause", paused: document.hidden });
+    if (document.hidden) releaseInput();
+    send({ t: "pause", paused: document.hidden || controlsDialog.open });
     if (document.hidden) audio.suspend();
     else audio.resume();
   });
@@ -141,6 +159,15 @@ playBtn.addEventListener("click", () => {
 });
 
 function onKey(e: KeyboardEvent, down: boolean): void {
+  if (controlsDialog.open || (e.target instanceof HTMLElement && e.target.closest("input, select, button, textarea, [contenteditable]"))) {
+    if (!down && worker && KEYMAP[e.code]) send({ t: "key", code: e.code, down: false });
+    return;
+  }
+  if (worker && e.code === "Backquote" && controlOptions.preset === "modern") {
+    e.preventDefault();
+    if (down && !e.repeat) toggleTyping();
+    return;
+  }
   if (!worker || !KEYMAP[e.code] || e.code === "F11" || e.code === "F12") return;
   e.preventDefault();
   if (down && e.repeat) return;
@@ -148,15 +175,91 @@ function onKey(e: KeyboardEvent, down: boolean): void {
 }
 window.addEventListener("keydown", (e) => onKey(e, true));
 window.addEventListener("keyup", (e) => onKey(e, false));
-window.addEventListener("blur", () => {
-  for (const code of Object.keys(KEYMAP)) send({ t: "key", code, down: false });
+window.addEventListener("blur", releaseInput);
+
+function releaseInput(): void {
+  aiming = false;
+  send({ t: "input-reset" });
+  if (document.pointerLockElement === canvas) document.exitPointerLock();
+}
+
+function updateControls(): void {
+  releaseInput();
+  preset.value = presetDialog.value = controlOptions.preset;
+  mouseEnabled.checked = controlOptions.mouse;
+  invertY.checked = controlOptions.invertY;
+  sensitivity.value = String(controlOptions.sensitivity);
+  $("modern-guide").hidden = controlOptions.preset !== "modern";
+  $("original-guide").hidden = controlOptions.preset !== "original";
+  typingBtn.hidden = controlOptions.preset !== "modern";
+  typingBtn.textContent = `Typing: ${controlOptions.typing ? "on" : "off"}`;
+  typingBtn.setAttribute("aria-pressed", String(controlOptions.typing));
+  inputHint.hidden = controlOptions.preset !== "modern";
+  inputHint.textContent = controlOptions.typing ? "Typing mode — press ` or Typing to resume modern controls" : "WASD move / turn · Space jump · E interact · Hold right mouse to look · Controls in top bar";
+  send({ t: "controls", options: controlOptions });
+  try { localStorage.setItem("hype-controls", JSON.stringify({ ...controlOptions, typing: false })); } catch {}
+}
+function toggleTyping(): void { controlOptions.typing = !controlOptions.typing; updateControls(); typingBtn.blur(); }
+typingBtn.addEventListener("click", toggleTyping);
+for (const sel of [preset, presetDialog]) sel.addEventListener("change", () => {
+  controlOptions.preset = sel.value as Preset; controlOptions.typing = false; updateControls(); sel.blur();
 });
+mouseEnabled.addEventListener("change", () => { controlOptions.mouse = mouseEnabled.checked; updateControls(); });
+invertY.addEventListener("change", () => { controlOptions.invertY = invertY.checked; updateControls(); });
+sensitivity.addEventListener("input", () => { controlOptions.sensitivity = Number(sensitivity.value); updateControls(); });
+function showControls(): void {
+  releaseInput(); controlsDialog.showModal(); send({ t: "pause", paused: true });
+}
+for (const id of ["controls-setup", "controls-open"]) $(id).addEventListener("click", showControls);
+$("controls-close").addEventListener("click", () => controlsDialog.close());
+controlsDialog.addEventListener("close", () => {
+  send({ t: "pause", paused: document.hidden });
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+});
+const useMouse = () => !!worker && !controlsDialog.open && controlOptions.preset === "modern" && controlOptions.mouse && !controlOptions.typing;
+canvas.addEventListener("contextmenu", (e) => { if (useMouse()) e.preventDefault(); });
+canvas.addEventListener("pointerdown", (e) => {
+  if (!useMouse() || e.pointerType !== "mouse") return;
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  send({ t: "mouse-button", button: e.button, down: true });
+  if (e.button === 2) {
+    aiming = true;
+    // Right-drag remains available in browsers that do not grant pointer lock.
+    try {
+      const request = canvas.requestPointerLock?.() as Promise<void> | undefined;
+      request?.then(() => { if (!aiming && document.pointerLockElement === canvas) document.exitPointerLock(); }).catch(() => {});
+    } catch {}
+  }
+});
+window.addEventListener("pointerup", (e) => {
+  if (!useMouse() || e.pointerType !== "mouse") return;
+  send({ t: "mouse-button", button: e.button, down: false });
+  if (e.button === 2) {
+    aiming = false;
+    if (document.pointerLockElement === canvas) document.exitPointerLock();
+  }
+});
+canvas.addEventListener("pointercancel", releaseInput);
+document.addEventListener("pointerlockchange", () => {
+  if (document.pointerLockElement !== canvas && aiming) {
+    aiming = false; send({ t: "input-reset", mouseOnly: true });
+  }
+});
+document.addEventListener("mousemove", (e) => {
+  if (useMouse() && aiming) send({ t: "mouse-move", dx: e.movementX, dy: e.movementY });
+});
+canvas.addEventListener("wheel", (e) => {
+  if (!useMouse()) return;
+  e.preventDefault(); send({ t: "mouse-wheel" });
+}, { passive: false });
+updateControls();
 
 function toggleFullscreen(): void {
   if (document.fullscreenElement) document.exitFullscreen();
   else stage.requestFullscreen().catch(() => {});
 }
-canvas.addEventListener("dblclick", toggleFullscreen);
+canvas.addEventListener("dblclick", () => { if (!useMouse()) toggleFullscreen(); });
 fullscreenBtn.addEventListener("click", () => {
   toggleFullscreen();
   fullscreenBtn.blur();

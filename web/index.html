@@ -25,6 +25,13 @@
   #hud { position: fixed; left: 10px; top: 8px; display: flex; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 6px; background: #000a; font-size: 13px; opacity: 0; transition: opacity .3s; }
   #hud.show, #hud:hover { opacity: 1; }
   #hud button { padding: 4px 10px; font-size: 13px; }
+  #hud { flex-wrap: wrap; max-width: calc(100vw - 40px); }
+  dialog { background: #17171f; color: #e8e4d8; border: 1px solid #514834; border-radius: 12px; padding: 24px; max-width: min(560px, calc(100vw - 72px)); max-height: 80vh; }
+  dialog::backdrop { background: #000b; }
+  dialog h2 { margin-top: 0; color: #f3c74e; }
+  dialog table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  dialog td, dialog th { padding: 6px 10px; text-align: left; border-bottom: 1px solid #36333c; }
+  #input-hint { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); background: #000b; padding: 6px 12px; border-radius: 6px; color: #ddd; font-size: 12px; pointer-events: none; text-align: center; }
   #volume { width: 110px; accent-color: #f3c74e; }
   #stats { position: fixed; right: 8px; top: 6px; font: 12px ui-monospace, monospace; color: #7f7; text-shadow: 0 0 3px #000; pointer-events: none; }
   details { position: fixed; left: 8px; bottom: 6px; max-width: 70vw; font-size: 12px; color: #aaa; }
@@ -45,6 +52,7 @@
     </select>
   </div>
   <div class="row"><button id="play" disabled>Play</button></div>
+  <div class="row"><label for="preset">Controls</label><select id="preset"><option value="modern">Modern keyboard + mouse</option><option value="original">Original keyboard</option></select><button id="controls-setup">View controls</button></div>
   <div id="status">Pick your disc's root folder (the one containing <code>InstData</code>), or a <code>.iso</code> image of it.</div>
   <p class="note">Supports the demo and full-game discs with an unlocked Glide executable, including cutscenes.</p>
   <p class="note">Game files stay on your computer; nothing is uploaded. Saves are kept in this browser's storage. Move the mouse over the game for volume and full screen.</p>
@@ -52,9 +60,35 @@
 <div id="stage" hidden>
   <canvas id="screen"></canvas>
   <div id="loading"><b>Loading Hype…</b><span id="loading-status"></span></div>
-  <div id="hud"><label for="volume">Volume</label><input id="volume" type="range" min="0" max="1" step="0.05"><button id="fullscreen">Full screen</button></div>
+  <div id="hud"><label for="volume">Volume</label><input id="volume" type="range" min="0" max="1" step="0.05"><button id="fullscreen">Full screen</button><button id="controls-open">Controls</button><button id="typing" aria-pressed="false">Typing: off</button></div>
+  <div id="input-hint" hidden></div>
   <div id="stats" hidden></div>
 </div>
+<dialog id="controls-dialog" aria-labelledby="controls-title">
+  <h2 id="controls-title">Controls</h2>
+  <p>The game pauses while this panel is open.</p>
+  <div class="row"><label for="preset-dialog">Preset</label><select id="preset-dialog"><option value="modern">Modern keyboard + mouse</option><option value="original">Original keyboard</option></select></div>
+  <div id="modern-guide">
+    <table><tbody>
+      <tr><th>Action</th><th>Your control</th><th>Game prompt</th></tr>
+      <tr><td>Move / turn</td><td>WASD or arrows</td><td>Arrows</td></tr>
+      <tr><td>Jump</td><td>Space</td><td>Left Ctrl</td></tr>
+      <tr><td>Interact / attack</td><td>E or left click</td><td>Space</td></tr>
+      <tr><td>Run</td><td>Hold Shift</td><td>Shift</td></tr>
+      <tr><td>Look / aim</td><td>Hold right mouse + move, or C + arrows</td><td>0 / Ins</td></tr>
+      <tr><td>Sword / crossbow</td><td>Q / R</td><td>X / Z</td></tr>
+      <tr><td>Select / cast magic</td><td>F or wheel / G or middle click</td><td>Delete / Enter</td></tr>
+      <tr><td>Sidestep left / right</td><td>Z / X</td><td>A / S</td></tr>
+      <tr><td>Inventory / map</td><td>Tab / M</td><td>Tab / End</td></tr>
+    </tbody></table>
+    <p>A/D turn Hype. Mouse aiming uses the original directional look controls; it is experimental. WASD adjusts the view while looking.</p>
+    <div class="row"><label><input id="mouse-enabled" type="checkbox" checked> Mouse controls</label><label><input id="invert-y" type="checkbox"> Invert mouse Y</label></div>
+    <div class="row"><label for="sensitivity">Mouse sensitivity</label><input id="sensitivity" type="range" min="0.25" max="6" step="0.25" value="2"></div>
+    <p>For player names, switch Typing on using the top bar or the backtick (`) key. Switch it off to resume modern controls. Tutorial prompts still show the original keys. This preset assumes the game's default English/QWERTY bindings.</p>
+  </div>
+  <p id="original-guide" hidden>Original keys pass through unchanged. Rebind actions in the game's Configuration → Controls menu. Browser mouse aiming is off.</p>
+  <button id="controls-close">Done</button>
+</dialog>
 <details><summary>log</summary><pre id="log"></pre></details>
 <script src="main.js"></script>
 </body>

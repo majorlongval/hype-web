@@ -6,6 +6,7 @@ import { mm, type AudioSink } from "../win32/winmm";
 import { injectKey } from "../win32/user32";
 import { di, diKey } from "../win32/dinput";
 import { KEYMAP } from "../win32/keys";
+import { Controls } from "./controls";
 import type { Machine } from "../win32/machine";
 import { WebGLGlide } from "./webgl-glide";
 import type { DiscSpec, FromWorker, ToWorker } from "./protocol";
@@ -159,6 +160,12 @@ class WorkerAudio implements AudioSink {
 }
 
 let m: Machine | null = null;
+const controls = new Controls((code, down) => {
+  const k = KEYMAP[code];
+  if (!m || !k) return;
+  injectKey(m, k[0], down);
+  diKey(m, k[1], down);
+});
 let gfx: WebGLGlide | null = null;
 let paused = false;
 let frames = 0;
@@ -179,6 +186,7 @@ function schedule(delay: number): void {
 function tick(): void {
   scheduled = false;
   if (!m || paused) return;
+  controls.tick(performance.now());
   const start = performance.now();
   let r: ReturnType<Machine["run"]> = "slice";
   try {
@@ -236,12 +244,14 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
       start(msg).catch((err: Error) => post({ t: "error", msg: err.stack ?? String(err) }));
       break;
     case "key": {
-      const k = KEYMAP[msg.code];
-      if (!m || !k) return;
-      injectKey(m, k[0], msg.down);
-      diKey(m, k[1], msg.down);
+      if (m) controls.key(msg.code, msg.down);
       break;
     }
+    case "controls": controls.configure(msg.options); break;
+    case "input-reset": msg.mouseOnly ? controls.resetMouse() : controls.reset(); break;
+    case "mouse-button": if (m) controls.button(msg.button, msg.down); break;
+    case "mouse-move": if (m) controls.move(msg.dx, msg.dy); break;
+    case "mouse-wheel": if (m) controls.wheel(performance.now()); break;
     case "resize":
       gfx?.resize(msg.width, msg.height);
       break;

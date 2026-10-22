@@ -1,3 +1,5 @@
+import type { ControlOptions } from "./controls";
+
 export type DiscSpec =
   | { kind: "files"; label: string; files: [string, File][] }
   | { kind: "http"; label: string; base: string }
@@ -6,6 +8,11 @@ export type DiscSpec =
 export type ToWorker =
   | { t: "start"; disc: DiscSpec; canvas: OffscreenCanvas; width: number; height: number; language: string; msaa: number }
   | { t: "key"; code: string; down: boolean }
+  | { t: "controls"; options: ControlOptions }
+  | { t: "input-reset"; mouseOnly?: boolean }
+  | { t: "mouse-button"; button: number; down: boolean }
+  | { t: "mouse-move"; dx: number; dy: number }
+  | { t: "mouse-wheel" }
   | { t: "resize"; width: number; height: number }
   | { t: "pad"; connected: boolean; buttons: number; axes: number[] }
   | { t: "pause"; paused: boolean };
