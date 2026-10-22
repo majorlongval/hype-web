@@ -93,6 +93,7 @@ export class Glide {
   width = 640;
   height = 480;
   open = false;
+  colorFormat = 0;
   tmu = new Uint8Array(TMU_MEM);
   palette = new Uint32Array(256);
   layout = new Map<number, number>();
@@ -113,6 +114,19 @@ export class Glide {
 export function glide(m: Machine): Glide {
   return (m.sub.glide ??= new Glide());
 }
+
+/** Converts a GrColor_t in the format chosen at grSstWinOpen to 0xAARRGGBB. */
+export function toArgb(colorFormat: number, v: number): number {
+  const b0 = v >>> 24, b1 = (v >>> 16) & 0xff, b2 = (v >>> 8) & 0xff, b3 = v & 0xff;
+  switch (colorFormat) {
+    case 1: return ((b0 << 24) | (b3 << 16) | (b2 << 8) | b1) >>> 0;
+    case 2: return ((b3 << 24) | (b0 << 16) | (b1 << 8) | b2) >>> 0;
+    case 3: return ((b3 << 24) | (b2 << 16) | (b1 << 8) | b0) >>> 0;
+    default: return v >>> 0;
+  }
+}
+
+const argb = (m: Machine, v: number) => toArgb(glide(m).colorFormat, v);
 
 const RES: Record<number, [number, number]> = {
   0x0: [320, 200], 0x1: [320, 240], 0x2: [400, 256], 0x3: [512, 384], 0x4: [640, 200], 0x5: [640, 350], 0x6: [640, 400],
@@ -234,6 +248,7 @@ export function registerGlide3x(m0: Machine): void {
       g.width = res[0];
       g.height = res[1];
       g.open = true;
+      g.colorFormat = a.u(3);
       g.st.clip = [0, 0, g.width, g.height];
       g.backend.open(g.width, g.height);
       m.log(`grSstWinOpen ${g.width}x${g.height} origin=${a.u(4)} buffers=${a.u(5)}/${a.u(6)}`);
@@ -276,7 +291,7 @@ export function registerGlide3x(m0: Machine): void {
     grColorCombine: [20, (m, a) => { st(m).colorCombine = [a.u(0), a.u(1), a.u(2), a.u(3), a.u(4)]; }],
     grAlphaCombine: [20, (m, a) => { st(m).alphaCombine = [a.u(0), a.u(1), a.u(2), a.u(3), a.u(4)]; }],
     grTexCombine: [28, (m, a) => { st(m).texCombine = [a.u(1), a.u(2), a.u(3), a.u(4), a.u(5), a.u(6)]; }],
-    grConstantColorValue: [4, (m, a) => { st(m).constantColor = a.u(0); }],
+    grConstantColorValue: [4, (m, a) => { st(m).constantColor = argb(m, a.u(0)); }],
     grAlphaBlendFunction: [16, (m, a) => { st(m).blend = [a.u(0), a.u(1), a.u(2), a.u(3)]; }],
     grAlphaTestFunction: [4, (m, a) => { st(m).alphaTestFunc = a.u(0); }],
     grAlphaTestReferenceValue: [4, (m, a) => { st(m).alphaRef = a.u(0) & 0xff; }],
@@ -287,9 +302,9 @@ export function registerGlide3x(m0: Machine): void {
     grDepthRange: [8, () => {}],
     grColorMask: [8, (m, a) => { st(m).colorMask = a.u(0) !== 0; st(m).alphaMask = a.u(1) !== 0; }],
     grChromakeyMode: [4, (m, a) => { st(m).chromaMode = a.u(0); }],
-    grChromakeyValue: [4, (m, a) => { st(m).chromaValue = a.u(0); }],
+    grChromakeyValue: [4, (m, a) => { st(m).chromaValue = argb(m, a.u(0)); }],
     grFogMode: [4, (m, a) => { st(m).fogMode = a.u(0); }],
-    grFogColorValue: [4, (m, a) => { st(m).fogColor = a.u(0); }],
+    grFogColorValue: [4, (m, a) => { st(m).fogColor = argb(m, a.u(0)); }],
     grFogTable: [4, (m, a) => { st(m).fogTable = m.mem.u8.slice(a.u(0), a.u(0) + 64); }],
     guFogGenerateLinear: [12, (m, a) => {
       const p = a.u(0), near = a.f32(1), far = a.f32(2);
@@ -303,7 +318,7 @@ export function registerGlide3x(m0: Machine): void {
     guFogTableIndexToW: [4, (m, a) => { m.cpu.fpu.push(fogIndexToW(a.i(0))); }],
     grBufferClear: [12, (m, a) => {
       const g = glide(m);
-      g.backend.clear(a.u(0), a.u(1) & 0xff, a.u(2), g.st);
+      g.backend.clear(argb(m, a.u(0)), a.u(1) & 0xff, a.u(2), g.st);
     }],
     grBufferSwap: [4, (m, a) => {
       const g = glide(m);
