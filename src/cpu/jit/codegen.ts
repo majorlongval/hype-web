@@ -30,6 +30,27 @@ const C0 = 0x100, C2 = 0x400, C3 = 0x4000;
 
 const FLDC = [1, Math.log2(10), Math.LOG2E, Math.PI, Math.log10(2), Math.LN2, 0];
 
+const V_LOAD64_ZERO = 0x5d, V_STORE64_LANE = 0x5b, V_SHUFFLE = 0x0d, V_SPLAT32 = 0x11, V_AND = 0x4e, V_ANDNOT = 0x4f;
+const V_EXTMUL_LO_S16 = 0xbc;
+
+/** Lane-wise MMX ops on the low 64 bits, as WASM SIMD opcodes taking (dst, src). */
+const MMX_BINARY: Record<number, number> = {
+  0xfc: 0x6e, 0xfd: 0x8e, 0xfe: 0xae, 0xf8: 0x71, 0xf9: 0x91, 0xfa: 0xb1,
+  0xec: 0x6f, 0xed: 0x8f, 0xdc: 0x70, 0xdd: 0x90, 0xe8: 0x72, 0xe9: 0x92, 0xd8: 0x73, 0xd9: 0x93,
+  0xd5: 0x95, 0xf5: 0xba, 0xdb: 0x4e, 0xeb: 0x50, 0xef: 0x51,
+  0x64: 0x27, 0x65: 0x31, 0x66: 0x3b, 0x74: 0x23, 0x75: 0x2d, 0x76: 0x37,
+};
+const MMX_UNPACK: Record<number, number[]> = {
+  0x60: [0, 16, 1, 17, 2, 18, 3, 19], 0x61: [0, 1, 16, 17, 2, 3, 18, 19], 0x62: [0, 1, 2, 3, 16, 17, 18, 19],
+  0x68: [4, 20, 5, 21, 6, 22, 7, 23], 0x69: [4, 5, 20, 21, 6, 7, 22, 23], 0x6a: [4, 5, 6, 7, 20, 21, 22, 23],
+};
+const MMX_PACK: Record<number, number> = { 0x63: 0x65, 0x67: 0x66, 0x6b: 0x85 };
+/** Register-count shifts: opcode -> [lane bits, kind 0 logical right / 1 arithmetic right / 2 left]. */
+const MMX_SHIFT: Record<number, [number, number]> = {
+  0xd1: [16, 0], 0xd2: [32, 0], 0xd3: [64, 0], 0xe1: [16, 1], 0xe2: [32, 1], 0xf1: [16, 2], 0xf2: [32, 2], 0xf3: [64, 2],
+};
+const SHIFT_OPS: Record<number, number[]> = { 16: [0x8d, 0x8c, 0x8b], 32: [0xad, 0xac, 0xab], 64: [0xcd, 0, 0xcb] };
+
 export class RegionCompiler {
   private c = new Code(1);
   private R: number[] = [];
@@ -1275,8 +1296,130 @@ export class RegionCompiler {
 
   // ---------- MMX ----------
 
+  private mreg(o: Opnd): number {
+    if (o.t !== "r") throw new Error("MMX operand is not a register");
+    return o.r;
+  }
+  private mmxOff(r: number): number {
+    return this.sb + ST_MMX + r * 8;
+  }
+  private mmxEnter(): void {
+    const c = this.c;
+    c.i32(0).i32(0).mem(Op.i32_store, this.sb + ST_FPU_TOP, 2);
+    c.i32(0).i64(0n).mem(Op.i64_store, this.sb + ST_FPU_EMPTY);
+  }
+  /** Pushes an MMX register or prepped m64 operand as a v128 with the upper half zero. */
+  private vload(o: Opnd): void {
+    const c = this.c;
+    if (o.t === "m") c.get(this.EA).simdMem(V_LOAD64_ZERO, 0, 0);
+    else c.i32(0).simdMem(V_LOAD64_ZERO, this.mmxOff(this.mreg(o)), 3);
+  }
+  /** Stores the v128 on the stack into MMX register r. */
+  private vstore(r: number): void {
+    const c = this.c;
+    c.set(this.V0).i32(0).get(this.V0).simdMem(V_STORE64_LANE, this.mmxOff(r), 3).u8(0);
+  }
+  private shuffle(lanes: number[]): void {
+    this.c.simd(V_SHUFFLE).bytes(new Uint8Array([...lanes, ...new Array(16 - lanes.length).fill(0)]));
+  }
+  /** Shifts the v128 on the stack by the i32 count in local n, x86-style for counts >= the lane width. */
+  private vshift(bits: number, kind: number, n: number): void {
+    const c = this.c;
+    if (kind === 1) {
+      c.i32(bits - 1).get(n).get(n).i32(bits - 1).op(Op.i32_gt_u).op(Op.select).simd(SHIFT_OPS[bits][1]);
+      return;
+    }
+    c.get(n).simd(SHIFT_OPS[bits][kind]);
+    c.i32(0).get(n).i32(bits).op(Op.i32_lt_u).op(Op.i32_sub).simd(V_SPLAT32).simd(V_AND);
+  }
+
   private mmx(i: JInsn): boolean | null {
-    void i;
+    const c = this.c, T = this.T;
+    switch (i.op) {
+      case "movd_to":
+        this.prep(i.b);
+        this.mmxEnter();
+        c.i32(0);
+        this.read(i.b!);
+        c.op(Op.i64_extend_i32_u).mem(Op.i64_store, this.mmxOff(i.x!), 3);
+        return false;
+      case "movd_from":
+        this.prep(i.a);
+        this.mmxEnter();
+        c.i32(0).mem(Op.i32_load, this.mmxOff(i.x!), 2).set(T[2]);
+        this.write(i.a!, T[2]);
+        return false;
+      case "movq_to": {
+        const b = i.b!;
+        this.prep(b);
+        this.mmxEnter();
+        c.i32(0);
+        if (b.t === "m") c.get(this.EA).mem(Op.i64_load);
+        else c.i32(0).mem(Op.i64_load, this.mmxOff(this.mreg(b)), 3);
+        c.mem(Op.i64_store, this.mmxOff(i.x!), 3);
+        return false;
+      }
+      case "movq_from": {
+        const a = i.a!;
+        this.prep(a);
+        this.mmxEnter();
+        if (a.t === "m") c.get(this.EA);
+        else c.i32(0);
+        c.i32(0).mem(Op.i64_load, this.mmxOff(i.x!), 3);
+        if (a.t === "m") c.mem(Op.i64_store);
+        else c.mem(Op.i64_store, this.mmxOff(this.mreg(a)), 3);
+        return false;
+      }
+      case "mmx_shi": {
+        const bits = i.x === 0x71 ? 16 : i.x === 0x72 ? 32 : 64;
+        const kind = i.y === 2 ? 0 : i.y === 4 ? 1 : i.y === 6 ? 2 : -1;
+        if (kind < 0 || (bits === 64 && kind === 1) || i.a!.t !== "r" || i.b!.t !== "i") return null;
+        this.mmxEnter();
+        c.i32(i.b!.v & 0xff).set(T[0]);
+        this.vload(i.a!);
+        this.vshift(bits, kind, T[0]);
+        this.vstore(this.mreg(i.a!));
+        return false;
+      }
+      case "mmx": {
+        const opc = i.x!, dst = i.y!, b = i.b!;
+        const shift = MMX_SHIFT[opc];
+        if (!shift && MMX_BINARY[opc] === undefined && !MMX_UNPACK[opc] && MMX_PACK[opc] === undefined
+          && opc !== 0xdf && opc !== 0xe5) return null;
+        this.prep(b);
+        this.mmxEnter();
+        if (shift) {
+          if (b.t === "m") c.get(this.EA).mem(Op.i64_load);
+          else c.i32(0).mem(Op.i64_load, this.mmxOff(this.mreg(b)), 3);
+          c.set(this.L0);
+          c.i32(64).get(this.L0).op(Op.i32_wrap_i64).get(this.L0).i64(64n).op(Op.i64_gt_u).op(Op.select).set(T[0]);
+          this.vload({ t: "r", r: dst, sz: 8 });
+          this.vshift(shift[0], shift[1], T[0]);
+          this.vstore(dst);
+          return false;
+        }
+        this.vload(b);
+        c.set(this.V1);
+        this.vload({ t: "r", r: dst, sz: 8 });
+        if (opc === 0xdf) {
+          c.set(this.V0).get(this.V1).get(this.V0).simd(V_ANDNOT);
+        } else if (opc === 0xe5) {
+          c.get(this.V1).simd(V_EXTMUL_LO_S16).set(this.V0).get(this.V0).get(this.V0);
+          this.shuffle([2, 3, 6, 7, 10, 11, 14, 15]);
+        } else if (MMX_UNPACK[opc]) {
+          c.get(this.V1);
+          this.shuffle(MMX_UNPACK[opc]);
+        } else if (MMX_PACK[opc] !== undefined) {
+          c.get(this.V1);
+          this.shuffle([0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23]);
+          c.set(this.V0).get(this.V0).get(this.V0).simd(MMX_PACK[opc]);
+        } else {
+          c.get(this.V1).simd(MMX_BINARY[opc]);
+        }
+        this.vstore(dst);
+        return false;
+      }
+    }
     return null;
   }
 }
