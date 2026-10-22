@@ -47,12 +47,19 @@ export function registerDirectShow(m: Machine): void {
       movie.audioOpen = false;
     }
   };
+  const finish = (movie: Movie) => {
+    stop(movie);
+    if (!movie.video) return;
+    movie.frame = movie.video.chunks.length;
+    movie.start = m.now() - movie.video.chunks.length * movie.video.scale / movie.video.rate * 1000;
+    m.log("video: skipped");
+  };
   const previous = videoPlayback(m);
   const playing = () => [...objects.values()].filter((o) => o.kind === "multimedia" && o.movie?.running).map((o) => o.movie!);
   m.sub.videoPlayback = {
     skipAll: previous.skipAll,
     get playing() { return playing().length > 0; },
-    skipCurrent() { const movies = playing(); for (const movie of movies) stop(movie); return movies.length > 0; },
+    skipCurrent() { const movies = playing(); for (const movie of movies) finish(movie); return movies.length > 0; },
   } satisfies Playback;
   const base = (kind: string, iids: string[]): Method[] => [
     ["QueryInterface", 12, (_m, a) => {
@@ -74,8 +81,12 @@ export function registerDirectShow(m: Machine): void {
       return refs;
     }],
   ];
+  const used = new Set<string>();
   const make = (kind: string, methods: Method[], state: Omit<ObjectState, "refs" | "kind"> = {}) => {
-    const p = comObject(m, `retail:${kind}`, methods);
+    const p = comObject(m, `retail:${kind}`, methods.map(([name, pop, impl]): Method => [name, pop, (mm, a) => {
+      if (!used.has(`${kind}.${name}`)) { used.add(`${kind}.${name}`); m.log(`video: game uses ${kind}.${name}`); }
+      return impl(mm, a);
+    }]));
     objects.set(p, { refs: 1, kind, ...state }); return p;
   };
   const unsupported = (name: string, count: number): Method => [name, count * 4, () => E_NOTIMPL];
@@ -235,7 +246,7 @@ export function registerDirectShow(m: Machine): void {
     ["SetState", 8, (_m, a) => {
       const movie = get(a).movie!;
       if (!a.u(1)) { stop(movie); return 0; }
-      if (videoPlayback(m).skipAll) { stop(movie); return 0; }
+      if (videoPlayback(m).skipAll) { finish(movie); return 0; }
       movie.running = true; movie.start = m.now(); movie.frame = 0; movie.sent = 0;
       if (movie.audio) {
         const pcm = movie.audio; mm(m).sink?.open(movie.audioId, pcm.rate, pcm.channels, 16); movie.audioOpen = true;

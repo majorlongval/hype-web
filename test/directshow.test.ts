@@ -102,13 +102,21 @@ it("plays multimedia samples with RGB pixels, timed PCM, end-of-stream, and a se
   method(stream, 13, 0, 0, 0, out); const sample = u32(out);
   method(movie, 7, 1);
   expect(videoPlayback(m).playing).toBe(true);
+  const time = (index: number) => { method(movie, index, out); return m.mem.dv.getBigInt64(out, true); };
+  const expectFinished = () => {
+    expect(method(sample, 6, 0, 0, 0, 0)).toBe(0x40003);
+    expect(method(sample, 7, 0, 0)).toBe(0x40003);
+    method(movie, 6, out);
+    expect(u32(out)).toBe(0);
+    expect(time(8)).toBeGreaterThanOrEqual(time(9));
+  };
   expect(videoPlayback(m).skipCurrent()).toBe(true);
   expect(videoPlayback(m).playing).toBe(false);
-  expect(method(sample, 6, 0, 0, 0, 0)).toBe(0x40003);
+  expectFinished();
   expect([opened, closed, reset]).toEqual([3, 3, 3]);
   videoPlayback(m).skipAll = true;
   method(movie, 7, 1);
-  expect(method(sample, 6, 0, 0, 0, 0)).toBe(0x40003);
+  expectFinished();
   expect(opened).toBe(3); // Suppressed videos never queue audio.
   videoPlayback(m).skipAll = false;
   method(movie, 7, 1);

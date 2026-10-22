@@ -4,7 +4,7 @@ export interface ControlOptions { preset: Preset; mouse: boolean; sensitivity: n
 export const DEFAULT_CONTROLS: ControlOptions = { preset: "modern", mouse: true, sensitivity: 2, invertY: false, typing: false, tapAssist: true };
 export const MODERN_KEYS: Record<string, string> = {
   KeyW: "ArrowUp", KeyS: "ArrowDown", KeyA: "ArrowLeft", KeyD: "ArrowRight",
-  Space: "ControlLeft", KeyE: "Space", KeyQ: "KeyX", KeyR: "KeyZ",
+  KeyE: "Space", KeyQ: "KeyX", KeyR: "KeyZ",
   KeyF: "Delete", KeyG: "Enter", KeyC: "Numpad0", KeyM: "End",
   KeyZ: "KeyA", KeyX: "KeyS",
 };
@@ -35,8 +35,10 @@ export class Controls {
     this.held = next;
   }
   key(code: string, down: boolean, now = 0): void {
-    const target = this.options.preset === "modern" && !this.options.typing ? MODERN_KEYS[code] ?? code : code;
-    if (code === "Space" && this.options.tapAssist && !this.options.typing) {
+    const assist = this.options.tapAssist && !this.options.typing;
+    const target = assist && code === "AltLeft" ? "Space"
+      : this.options.preset === "modern" && !this.options.typing ? MODERN_KEYS[code] ?? code : code;
+    if (code === "Space" && assist) {
       if (down) this.space = { until: now + 140, read: false, released: false };
       else if (this.space) { this.space.released = true; return; }
     }
