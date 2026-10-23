@@ -200,6 +200,7 @@ function onKey(e: KeyboardEvent, down: boolean): void {
 window.addEventListener("keydown", (e) => onKey(e, true));
 window.addEventListener("keyup", (e) => onKey(e, false));
 window.addEventListener("blur", releaseInput);
+window.addEventListener("beforeunload", (e) => { if (worker) e.preventDefault(); });
 
 function releaseInput(): void {
   aiming = false;
@@ -301,9 +302,11 @@ canvas.addEventListener("wheel", (e) => {
 }, { passive: false });
 updateControls();
 
+const keyboard = () => (navigator as Navigator & { keyboard?: { lock(): Promise<void> } }).keyboard;
+
 function toggleFullscreen(): void {
   if (document.fullscreenElement) document.exitFullscreen();
-  else stage.requestFullscreen().catch(() => {});
+  else stage.requestFullscreen().then(() => keyboard()?.lock()).catch(() => {});
 }
 canvas.addEventListener("dblclick", () => { if (!useMouse()) toggleFullscreen(); });
 fullscreenBtn.addEventListener("click", () => {
