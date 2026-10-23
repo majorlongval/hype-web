@@ -7,6 +7,7 @@ const GR_RESOLUTION_640x480 = 0x7;
 const GR_COLORFORMAT_ARGB = 0, GR_COLORFORMAT_ABGR = 1, GR_COLORFORMAT_RGBA = 2, GR_COLORFORMAT_BGRA = 3;
 const GR_PARAM_XY = 0x01, GR_PARAM_Q = 0x03, GR_PARAM_ENABLE = 1;
 const GR_CMP_LEQUAL = 3, GR_CMP_ALWAYS = 7;
+const GR_COMBINE_FUNCTION_SCALE_OTHER = 3, GR_COMBINE_FACTOR_ONE = 8, GR_COMBINE_OTHER_TEXTURE = 1;
 
 function openGlide(colorFormat: number, outWidth = 0) {
   const m = new Machine(new VFS(), { now: () => 0, log: () => {} });
@@ -87,7 +88,29 @@ it("centres flat 2D overlays at their original size", () => {
 
   call("grDepthBufferFunction", GR_CMP_ALWAYS);
 
-  expect(triangle([[0, 0, 0.25], [320, 10, 0.25], [640, 20, 0.25]])).toEqual([107, 427, 747]);
+  expect(triangle([[80, 0, 0.25], [320, 10, 0.25], [560, 20, 0.25]])).toEqual([187, 427, 667]);
+});
+
+it("centres a full-screen picture at its original size", () => {
+  const { call, triangle } = openGlide(GR_COLORFORMAT_ARGB, 854);
+
+  call("grDepthBufferFunction", GR_CMP_ALWAYS);
+  call("grColorCombine", GR_COMBINE_FUNCTION_SCALE_OTHER, GR_COMBINE_FACTOR_ONE, 0, GR_COMBINE_OTHER_TEXTURE, 0);
+
+  expect(triangle([[0, 0, 0.25], [639, 0, 0.25], [639, 479, 0.25]])).toEqual([107, 746, 746]);
+});
+
+it.each([
+  ["a plain cinematic bar", false, 60],
+  ["a textured cinematic bar", true, 60],
+  ["a plain full-screen fade", false, 479],
+])("stretches %s across the wide output", (_name, textured, bottom) => {
+  const { call, triangle } = openGlide(GR_COLORFORMAT_ARGB, 854);
+
+  call("grDepthBufferFunction", GR_CMP_ALWAYS);
+  if (textured) call("grColorCombine", GR_COMBINE_FUNCTION_SCALE_OTHER, GR_COMBINE_FACTOR_ONE, 0, GR_COMBINE_OTHER_TEXTURE, 0);
+
+  expect(triangle([[0, 0, 0.25], [640, 0, 0.25], [640, bottom, 0.25]])).toEqual([0, 854, 854]);
 });
 
 it("treats draws with varying depth as 3D even when the depth test is off", () => {

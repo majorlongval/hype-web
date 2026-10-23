@@ -207,13 +207,30 @@ const GR_CMP_ALWAYS = 7;
 
 const sideBar = (g: Glide) => (g.outWidth ? (g.outWidth - g.width) / 2 : 0);
 
-/** Stretches 3D draws to the output width and centres flat 2D overlays (fixed depth, depth test off) at their 4:3 size. */
-function widen(g: Glide, v: Float32Array, n: number): void {
-  let flat = g.st.depthFunc === GR_CMP_ALWAYS;
-  for (let i = 1; flat && i < n; i++) flat = v[i * VF + V_OOW] === v[V_OOW];
-  const scale = flat ? 1 : g.outWidth / g.width, shift = flat ? sideBar(g) : 0;
-  for (let i = 0; i < n; i++) v[i * VF + V_X] = v[i * VF + V_X] * scale + shift;
+/** Stretches 3D draws and screen-wide 2D effects to the output width; centres other flat 2D overlays (fixed depth, depth test off) at their 4:3 size. */
+function widen(g: Glide, v: Float32Array, n: number, group: number): void {
+  for (let from = 0; from < n; from += group) widenGroup(g, v, from, Math.min(n, from + group));
 }
+
+function widenGroup(g: Glide, v: Float32Array, from: number, to: number): void {
+  let flat = g.st.depthFunc === GR_CMP_ALWAYS;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = from; i < to; i++) {
+    const o = i * VF;
+    flat &&= v[o + V_OOW] === v[from * VF + V_OOW];
+    x0 = Math.min(x0, v[o + V_X]);
+    x1 = Math.max(x1, v[o + V_X]);
+    y0 = Math.min(y0, v[o + V_Y]);
+    y1 = Math.max(y1, v[o + V_Y]);
+  }
+  const picture = usesTexture(g.st) && y0 <= 0 && y1 >= g.height - 1;
+  const screenWide = x0 <= 0 && x1 >= g.width - 1 && !picture;
+  const centred = flat && !screenWide;
+  const scale = centred ? 1 : g.outWidth / g.width, shift = centred ? sideBar(g) : 0;
+  for (let i = from; i < to; i++) v[i * VF + V_X] = v[i * VF + V_X] * scale + shift;
+}
+
+const usesTexture = ({ colorCombine: [fn, factor, , other] }: GlideState) => fn >= 3 && (other === 1 || factor === 4 || factor === 5 || factor === 0xc);
 
 function outputClip(g: Glide, [x0, y0, x1, y1]: [number, number, number, number]): [number, number, number, number] {
   if (!g.outWidth) return [x0, y0, x1, y1];
@@ -228,7 +245,7 @@ function drawPointers(m: Machine, g: Glide, ptrs: number[], mode: "tri" | "line"
     n++;
   }
   if (mode === "tri") g.stats.tris += n / 3;
-  if (g.outWidth) widen(g, g.batch, n);
+  if (g.outWidth) widen(g, g.batch, n, mode === "tri" ? 3 : n);
   g.backend.draw(mode, g.batch, n, g.st);
 }
 
