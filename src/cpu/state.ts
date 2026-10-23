@@ -19,6 +19,7 @@ export const STATE_BYTES = 264;
 
 /** Scratch area after the per-thread state (JIT globals, temporaries). Not saved per thread. */
 export const ST_SCRATCH = 512;
+export const ST_JIT_BUDGET = ST_SCRATCH, ST_JIT_RESUME = ST_SCRATCH + 4, ST_JIT_FORCE = ST_SCRATCH + 8;
 
 export function initState(u8: Uint8Array, off: number): void {
   const dv = new DataView(u8.buffer, u8.byteOffset + off, STATE_BYTES);

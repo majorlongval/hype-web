@@ -3,7 +3,7 @@ import { Code, I32, I64, F64, V128, Op, ModuleBuilder } from "./wasm";
 import type { JInsn, Mem, Opnd } from "./x86";
 import {
   ST_FLAGS, ST_LFA, ST_LFB, ST_LFCIN, ST_LFOF, ST_LFOP, ST_LFRES, ST_LFSZ, ST_SEGBASE, ST_FPU_TOP, ST_FPU_CW, ST_FPU_SW,
-  ST_FPU_EMPTY, ST_FPU_ST, ST_MMX,
+  ST_FPU_EMPTY, ST_FPU_ST, ST_MMX, ST_JIT_BUDGET, ST_JIT_RESUME, ST_JIT_FORCE,
 } from "../state";
 import { LF_ADC, LF_ADD, LF_DEC, LF_EAGER, LF_INC, LF_LOGIC, LF_NEG, LF_NONE, LF_SBB, LF_SUB } from "../cpu";
 
@@ -18,9 +18,8 @@ export interface Region {
   blocks: RBlock[];
 }
 
-/** Indices of functions and globals every region module imports, in import order. */
+/** Indices of functions every region module imports, in import order. */
 export const IMP_INTERP = 0, IMP_COND = 1, IMP_FLAGS = 2;
-export const G_BUDGET = 0, G_RESUME = 1, G_FORCE = 2;
 
 type FState = { k: "mem" } | { k: "lazy"; op: number; sz: number } | { k: "word" };
 
@@ -68,6 +67,7 @@ export class RegionCompiler {
   private D0: number;
   private D1: number;
   private TOP: number;
+  private BUDGET: number;
   private V0: number;
   private V1: number;
   private labels: string[] = [];
@@ -89,6 +89,7 @@ export class RegionCompiler {
     for (let i = 0; i < 6; i++) this.T.push(c.local(I32));
     this.EA = c.local(I32);
     this.TOP = c.local(I32);
+    this.BUDGET = c.local(I32);
     this.L0 = c.local(I64);
     this.L1 = c.local(I64);
     this.D0 = c.local(F64);
@@ -103,9 +104,6 @@ export class RegionCompiler {
   static module(regions: RegionCompiler[], pages: number): Uint8Array {
     const mb = new ModuleBuilder();
     mb.importMemory("e", "m", pages);
-    mb.importGlobal("e", "budget", I32, true);
-    mb.importGlobal("e", "resume", I32, true);
-    mb.importGlobal("e", "force", I32, true);
     mb.importFunc("e", "interp", [I32], [I32]);
     mb.importFunc("e", "cond", [I32], [I32]);
     mb.importFunc("e", "flags", [], [I32]);
@@ -139,6 +137,7 @@ export class RegionCompiler {
   compile(): Uint8Array {
     const c = this.c, sb = this.sb, blocks = this.region.blocks;
     for (let i = 0; i < 8; i++) c.i32(0).mem(Op.i32_load, sb + i * 4, 2).set(this.R[i]);
+    c.i32(0).mem(Op.i32_load, sb + ST_JIT_BUDGET, 2).set(this.BUDGET);
     this.open("loop", "L");
     this.open("block", "exit");
     for (let i = blocks.length - 1; i >= 0; i--) this.open("block", `B${i}`);
@@ -152,6 +151,7 @@ export class RegionCompiler {
     }
     this.close();
     for (let i = 0; i < 8; i++) c.i32(0).get(this.R[i]).mem(Op.i32_store, sb + i * 4, 2);
+    c.i32(0).get(this.BUDGET).mem(Op.i32_store, sb + ST_JIT_BUDGET, 2);
     c.get(this.NEXT).op(Op.return_);
     this.close();
     c.op(Op.unreachable);
@@ -161,7 +161,7 @@ export class RegionCompiler {
   private block(b: RBlock): void {
     const c = this.c;
     this.fs = { k: "mem" };
-    c.gget(G_BUDGET).i32(b.insns.length).op(Op.i32_sub).gset(G_BUDGET).gget(G_BUDGET).i32(0).op(Op.i32_lt_s);
+    c.get(this.BUDGET).i32(b.insns.length).op(Op.i32_sub).tee(this.BUDGET).i32(0).op(Op.i32_lt_s);
     this.open("if", "budget");
     this.exitConst(b.start);
     this.close();
@@ -203,7 +203,7 @@ export class RegionCompiler {
     const saved = this.fs;
     this.storeFlags();
     this.fs = saved;
-    this.c.i32(1).gset(G_FORCE);
+    this.c.i32(0).i32(1).mem(Op.i32_store, this.sb + ST_JIT_FORCE, 2);
     this.exitConst(addr);
   }
 
@@ -463,10 +463,10 @@ export class RegionCompiler {
     const c = this.c;
     this.storeFlags();
     this.storeRegs();
-    c.i32(insn.addr | 0).gset(G_RESUME);
+    c.i32(0).i32(insn.addr | 0).mem(Op.i32_store, this.sb + ST_JIT_RESUME, 2);
     c.i32(insn.addr | 0).call(IMP_INTERP).set(this.NEXT);
     this.loadRegs();
-    c.i32(insn.next | 0).gset(G_RESUME);
+    c.i32(0).i32(insn.next | 0).mem(Op.i32_store, this.sb + ST_JIT_RESUME, 2);
   }
 
   // ---------- instructions ----------

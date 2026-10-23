@@ -2,6 +2,7 @@ import type { CPU } from "../cpu";
 import { decodeBlock, type Block, type JitEntry } from "../decode";
 import { decode, type JInsn } from "./x86";
 import { RegionCompiler, type RBlock, type Region } from "./codegen";
+import { ST_JIT_BUDGET, ST_JIT_FORCE, ST_JIT_RESUME } from "../state";
 
 export const HOT = 40;
 const MAX_INSNS = 800;
@@ -9,9 +10,7 @@ const MAX_BLOCKS = 96;
 const MAX_BLOCK_INSNS = 200;
 
 export class Jit {
-  readonly budget = new WebAssembly.Global({ value: "i32", mutable: true }, 0);
-  readonly resume = new WebAssembly.Global({ value: "i32", mutable: true }, 0);
-  readonly force = new WebAssembly.Global({ value: "i32", mutable: true }, 0);
+  private readonly slots: Int32Array;
   private readonly imports: WebAssembly.Imports;
   private readonly single = new Map<number, Block>();
   private readonly pages: number;
@@ -21,12 +20,10 @@ export class Jit {
 
   constructor(private cpu: CPU) {
     this.pages = cpu.mem.wasm.buffer.byteLength / 65536;
+    this.slots = new Int32Array(cpu.mem.buf, cpu.mem.stateBase, ST_JIT_FORCE / 4 + 1);
     this.imports = {
       e: {
         m: cpu.mem.wasm,
-        budget: this.budget,
-        resume: this.resume,
-        force: this.force,
         interp: (a: number) => this.interp1(a >>> 0),
         cond: (cc: number) => (cpu.cond(cc) ? 1 : 0),
         flags: () => cpu.getFlags(),
@@ -178,22 +175,22 @@ export class Jit {
 
   /** Runs compiled code from `e`; returns the number of instructions it retired. */
   exec(e: JitEntry, budget: number): number {
-    const cpu = this.cpu;
-    this.budget.value = budget;
-    this.resume.value = cpu.eip;
-    this.force.value = 0;
+    const cpu = this.cpu, slots = this.slots;
+    slots[ST_JIT_BUDGET / 4] = budget;
+    slots[ST_JIT_RESUME / 4] = cpu.eip;
+    slots[ST_JIT_FORCE / 4] = 0;
     try {
       cpu.eip = e.fn(e.idx) >>> 0;
     } catch (err) {
-      cpu.eip = this.resume.value >>> 0;
+      cpu.eip = slots[ST_JIT_RESUME / 4] >>> 0;
       if (err instanceof WebAssembly.RuntimeError) {
         this.stats.traps++;
         cpu.jitOff = 256;
-        return Math.max(1, budget - (this.budget.value as number));
+        return Math.max(1, budget - slots[ST_JIT_BUDGET / 4]);
       }
       throw err;
     }
-    if (this.force.value) cpu.jitOff = 1;
-    return Math.max(1, budget - (this.budget.value as number));
+    if (slots[ST_JIT_FORCE / 4]) cpu.jitOff = 1;
+    return Math.max(1, budget - slots[ST_JIT_BUDGET / 4]);
   }
 }
