@@ -94,6 +94,7 @@ export class Glide {
   height = 480;
   open = false;
   colorFormat = 0;
+  outWidth = 0;
   tmu = new Uint8Array(TMU_MEM);
   palette = new Uint32Array(256);
   layout = new Map<number, number>();
@@ -202,6 +203,24 @@ function gatherVertex(m: Machine, g: Glide, p: number, out: Float32Array, o: num
   }
 }
 
+const GR_CMP_ALWAYS = 7;
+
+const sideBar = (g: Glide) => (g.outWidth ? (g.outWidth - g.width) / 2 : 0);
+
+/** Stretches 3D draws to the output width and centres flat 2D overlays (fixed depth, depth test off) at their 4:3 size. */
+function widen(g: Glide, v: Float32Array, n: number): void {
+  let flat = g.st.depthFunc === GR_CMP_ALWAYS;
+  for (let i = 1; flat && i < n; i++) flat = v[i * VF + V_OOW] === v[V_OOW];
+  const scale = flat ? 1 : g.outWidth / g.width, shift = flat ? sideBar(g) : 0;
+  for (let i = 0; i < n; i++) v[i * VF + V_X] = v[i * VF + V_X] * scale + shift;
+}
+
+function outputClip(g: Glide, [x0, y0, x1, y1]: [number, number, number, number]): [number, number, number, number] {
+  if (!g.outWidth) return [x0, y0, x1, y1];
+  const k = g.outWidth / g.width;
+  return [x0 <= 0 ? 0 : Math.round(x0 * k), y0, x1 >= g.width ? g.outWidth : Math.round(x1 * k), y1];
+}
+
 function drawPointers(m: Machine, g: Glide, ptrs: number[], mode: "tri" | "line" | "point"): void {
   let n = 0;
   for (const p of ptrs) {
@@ -209,6 +228,7 @@ function drawPointers(m: Machine, g: Glide, ptrs: number[], mode: "tri" | "line"
     n++;
   }
   if (mode === "tri") g.stats.tris += n / 3;
+  if (g.outWidth) widen(g, g.batch, n);
   g.backend.draw(mode, g.batch, n, g.st);
 }
 
@@ -249,8 +269,8 @@ export function registerGlide3x(m0: Machine): void {
       g.height = res[1];
       g.open = true;
       g.colorFormat = a.u(3);
-      g.st.clip = [0, 0, g.width, g.height];
-      g.backend.open(g.width, g.height);
+      g.st.clip = [0, 0, g.outWidth || g.width, g.height];
+      g.backend.open(g.outWidth || g.width, g.height);
       m.log(`grSstWinOpen ${g.width}x${g.height} origin=${a.u(4)} buffers=${a.u(5)}/${a.u(6)}`);
       return 1;
     }],
@@ -284,7 +304,7 @@ export function registerGlide3x(m0: Machine): void {
       else g.layout.delete(a.u(0));
     }],
     grViewport: [16, () => {}],
-    grClipWindow: [16, (m, a) => { st(m).clip = [a.u(0), a.u(1), a.u(2), a.u(3)]; }],
+    grClipWindow: [16, (m, a) => { st(m).clip = outputClip(glide(m), [a.u(0), a.u(1), a.u(2), a.u(3)]); }],
     grEnable: [4, (m, a) => { st(m).enables.add(a.u(0)); }],
     grDisable: [4, (m, a) => { st(m).enables.delete(a.u(0)); }],
     grCullMode: [4, (m, a) => { st(m).cull = a.u(0); }],
@@ -428,7 +448,7 @@ export function registerGlide3x(m0: Machine): void {
         const bpp = lk.fmt === 0x4 || lk.fmt === 0x5 ? 4 : 2;
         const n = g.width * g.height;
         const px = bpp === 4 ? new Uint32Array(m.mem.buf.slice(g.lfbBuf, g.lfbBuf + n * 4)) : new Uint16Array(m.mem.buf.slice(g.lfbBuf, g.lfbBuf + n * 2));
-        g.backend.lfbWrite(lk.buffer, 0, 0, g.width, g.height, px, lk.fmt);
+        g.backend.lfbWrite(lk.buffer, sideBar(g), 0, g.width, g.height, px, lk.fmt);
       }
       return 1;
     }],
@@ -444,7 +464,7 @@ export function registerGlide3x(m0: Machine): void {
           px[j * w + i] = bpp === 4 ? dv.getUint32(o, true) : dv.getUint16(o, true);
         }
       }
-      g.backend.lfbWrite(buffer, x, y, w, h, px, fmt);
+      g.backend.lfbWrite(buffer, x + sideBar(g), y, w, h, px, fmt);
       return 1;
     }],
     grLfbReadRegion: [28, (m, a) => {

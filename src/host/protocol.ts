@@ -6,7 +6,7 @@ export type DiscSpec =
   | { kind: "iso"; file: File };
 
 export type ToWorker =
-  | { t: "start"; disc: DiscSpec; canvas: OffscreenCanvas; width: number; height: number; language: string; msaa: number }
+  | { t: "start"; disc: DiscSpec; canvas: OffscreenCanvas; width: number; height: number; language: string; msaa: number; wide: number }
   | { t: "key"; code: string; down: boolean }
   | { t: "controls"; options: ControlOptions }
   | { t: "input-reset"; mouseOnly?: boolean }

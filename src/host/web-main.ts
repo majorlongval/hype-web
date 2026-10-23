@@ -30,9 +30,12 @@ const tapAssist = $<HTMLInputElement>("tap-assist");
 const skipVideoBtn = $<HTMLButtonElement>("skip-video");
 const skipVideosSetup = $<HTMLInputElement>("skip-videos-setup");
 const skipVideosEl = $<HTMLInputElement>("skip-videos");
+const widescreenEl = $<HTMLInputElement>("widescreen");
 const fastForwardBtn = $<HTMLButtonElement>("fast-forward");
 let skipVideos = false;
 try { skipVideos = localStorage.getItem("hype-skip-videos") === "true"; } catch {}
+try { widescreenEl.checked = localStorage.getItem("hype-widescreen") !== "false"; } catch {}
+widescreenEl.addEventListener("change", () => { try { localStorage.setItem("hype-widescreen", String(widescreenEl.checked)); } catch {} });
 let fastForward = false;
 let audioGain: GainNode | null = null;
 let resetAudio = () => {};
@@ -102,6 +105,11 @@ if (disc) {
   status("Development disc from the local server.");
 }
 
+function wideWidth([w, h]: [number, number]): number {
+  const width = Math.min(1280, Math.round((480 * w) / h / 2) * 2);
+  return width > 640 ? width : 0;
+}
+
 function deviceSize(): [number, number] {
   const r = stage.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -155,7 +163,8 @@ async function play(): Promise<void> {
   };
   const [w, h] = deviceSize();
   const off = canvas.transferControlToOffscreen();
-  send({ t: "start", disc, canvas: off, width: w, height: h, language: langSel.value, msaa: Number(params.get("msaa") ?? 4) }, [off]);
+  send({ t: "start", disc, canvas: off, width: w, height: h, language: langSel.value, msaa: Number(params.get("msaa") ?? 4), wide: widescreenEl.checked ? wideWidth([w, h]) : 0 }, [off]);
+  widescreenEl.disabled = true;
   new ResizeObserver(() => {
     const [cw, ch] = deviceSize();
     send({ t: "resize", width: cw, height: ch });

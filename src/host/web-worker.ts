@@ -1,4 +1,5 @@
 import { bootGame, readInstallPlan, type Disc } from "../boot";
+import { applyWidescreen } from "../widescreen";
 import type { FileSource, PersistStore } from "../win32/vfs";
 import { IsoFileSource, readIso } from "../media/iso9660";
 import { glide } from "../win32/glide3x";
@@ -236,6 +237,7 @@ async function start(msg: Extract<ToWorker, { t: "start" }>): Promise<void> {
   const host = { now: () => clock!.now(), log };
   const booted = bootGame({ disc, host, language: msg.language, saved, persist });
   m = booted.m;
+  if (msg.wide) applyWidescreen(m, msg.wide, log);
   videoPlayback(m).skipAll = skipVideos;
   di(m).onKeyboardRead = () => controls.keyboardRead();
   u32(m).onKeyboardRead = (vk) => {
